@@ -12,6 +12,7 @@ const Employee = require('../models/Employee');
 const Brand = require('../models/Brand');
 const { sendSuccess, sendError } = require('../utils/responseHandler');
 const { getEmployeeRole } = require('../helpers/authHelper');
+const notificationService = require('../services/notificationService');
 
 /**
  * @route   POST /api/broadcasts
@@ -345,7 +346,11 @@ const publishBroadcast = async (req, res) => {
     const storeTasks = await Promise.all(storeTasksPromises);
     const createdStoreTasks = storeTasks.filter(task => task !== null);
     
-    // TODO: Create notifications for managers (will be implemented later)
+    // Create notifications for managers
+    if (createdStoreTasks.length > 0) {
+      const managerIds = createdStoreTasks.map(task => task.managerId);
+      await notificationService.notifyBroadcastPublished(managerIds, broadcast);
+    }
     
     // Populate broadcast with store tasks
     await broadcast.populate([

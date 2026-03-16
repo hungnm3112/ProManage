@@ -9,6 +9,7 @@
 const UserTask = require('../models/UserTask');
 const StoreTask = require('../models/StoreTask');
 const { sendSuccess, sendError } = require('../utils/responseHandler');
+const notificationService = require('../services/notificationService');
 
 /**
  * @route   GET /api/my-tasks
@@ -319,11 +320,21 @@ const submitTask = async (req, res) => {
     await userTask.save();
     
     // Update store task status if needed
-    const storeTask = await StoreTask.findById(userTask.storeTaskId);
+    const storeTask = await StoreTask.findById(userTask.storeTaskId)
+      .populate('managerId', 'FullName');
     if (storeTask && storeTask.status === 'accepted') {
       storeTask.status = 'in_progress';
       storeTask.startedAt = new Date();
       await storeTask.save();
+    }
+    
+    // Notify manager about task submission
+    if (storeTask && storeTask.managerId) {
+      await notificationService.notifyTaskSubmitted(
+        storeTask.managerId._id,
+        userTask,
+        currentUser
+      );
     }
     
     return sendSuccess(res, 'Task submitted successfully', {

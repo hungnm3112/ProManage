@@ -9,6 +9,7 @@
 const UserTask = require('../models/UserTask');
 const StoreTask = require('../models/StoreTask');
 const { sendSuccess, sendError } = require('../utils/responseHandler');
+const notificationService = require('../services/notificationService');
 
 /**
  * @route   GET /api/reviews/pending
@@ -129,6 +130,13 @@ const approveTask = async (req, res) => {
     // Check if all user tasks for this store task are approved
     await checkStoreTaskCompletion(userTask.storeTaskId._id);
     
+    // Notify employee about approval
+    await notificationService.notifyTaskApproved(
+      userTask.employeeId._id,
+      userTask,
+      rating
+    );
+    
     return sendSuccess(res, 'Task approved successfully', {
       task: userTask,
       stats: userTask.getStats()
@@ -181,6 +189,12 @@ const rejectTask = async (req, res) => {
     userTask.reviewedAt = new Date();
     
     await userTask.save();
+    
+    // Notify employee about rejection
+    await notificationService.notifyTaskRejected(
+      userTask.employeeId._id,
+      userTask
+    );
     
     return sendSuccess(res, 'Task rejected successfully', {
       task: userTask,

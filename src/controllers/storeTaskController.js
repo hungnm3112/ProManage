@@ -12,6 +12,7 @@ const Employee = require('../models/Employee');
 const UserTask = require('../models/UserTask');
 const { sendSuccess, sendError } = require('../utils/responseHandler');
 const { getEmployeeRole } = require('../helpers/authHelper');
+const notificationService = require('../services/notificationService');
 
 /**
  * @route   GET /api/store-tasks
@@ -357,6 +358,14 @@ const assignEmployees = async (req, res) => {
     }
     
     await storeTask.save();
+    
+    // Send notifications to assigned employees
+    for (const userTask of userTasks) {
+      const employee = employees.find(emp => emp._id.toString() === userTask.employeeId.toString());
+      if (employee) {
+        await notificationService.notifyTaskAssigned(employee._id, userTask, broadcast);
+      }
+    }
     
     // Populate for response
     await storeTask.populate([

@@ -11,6 +11,7 @@ const Brand = require('./Brand');
 const Broadcast = require('./Broadcast');
 const StoreTask = require('./StoreTask');
 const UserTask = require('./UserTask');
+const Notification = require('./Notification');
 
 module.exports = {
   Employee,
@@ -18,5 +19,6 @@ module.exports = {
   Brand,
   Broadcast,
   StoreTask,
-  UserTask
+  UserTask,
+  Notification
 };
