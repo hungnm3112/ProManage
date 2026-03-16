@@ -20,6 +20,10 @@ connectDB();
 // Load all models (ensures they are registered before routes use them)
 require('./src/models');
 
+// Initialize recurring broadcasts cron job
+const { initRecurringBroadcastsJob } = require('./src/jobs/recurringBroadcasts');
+initRecurringBroadcastsJob();
+
 // Load routes (after models are registered)
 const routes = require('./src/routes');
 
