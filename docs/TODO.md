@@ -11,14 +11,14 @@
 ## 📊 Progress Overview
 
 - [x] **Phase 1: Foundation** (14/14 tasks - 100%) ✅ PHASE COMPLETE
-- [ ] **Phase 2: Core Feature** (7/12 tasks - 58%) - Broadcast API COMPLETE ✅
+- [ ] **Phase 2: Core Feature** (10/12 tasks - 83%) - Store Task API COMPLETE ✅
 - [ ] **Phase 3: Workflow** (0/10 tasks) - Ước tính: 2 tuần
 - [ ] **Phase 4: Advanced** (0/8 tasks) - Ước tính: 3 tuần
 
-**Total:** 21/44 tasks completed (48%)
+**Total:** 24/44 tasks completed (54%)
 
 **Latest Update:** March 16, 2026  
-**Last Commit:** 9e209cc - [FEATURE] Broadcast Management API Complete (Phase 2.1-2.2)
+**Last Commit:** 572ff6b - Phase 2.3: Store Task Management API complete
 
 ---
 
@@ -461,9 +461,9 @@
 
 ---
 
-### 2.3 Store Task API (Week 4, Day 1-3)
+### 2.3 Store Task API (Week 4, Day 1-3) ✅ COMPLETE
 
-- [ ] **Task 2.3.1: StoreTask Controller**
+- [x] **Task 2.3.1: StoreTask Controller** ✅
   - File: `src/controllers/storeTaskController.js`
   - Methods:
     - `getStoreTasks(req, res)` - GET /api/store-tasks
@@ -483,7 +483,7 @@
   - Dependencies: Task 2.1.2
   - Estimated: 3 giờ
 
-- [ ] **Task 2.3.2: StoreTask Routes**
+- [x] **Task 2.3.2: StoreTask Routes** ✅
   - File: `src/routes/storeTaskRoutes.js`
   - Routes:
     - GET /api/store-tasks - authenticate, authorize(['admin', 'manager'])
@@ -494,11 +494,13 @@
   - Dependencies: Task 2.3.1
   - Estimated: 1.5 giờ
 
-- [ ] **Task 2.3.3: Test StoreTask API**
+- [x] **Task 2.3.3: Test StoreTask API** ✅
   - Test manager view own store tasks
   - Test accept/reject task
   - Test authorization (manager chỉ thao tác với store của mình)
+  - Documentation: docs/STORETASK_API.md with 40+ test cases
   - Estimated: 2 giờ
+  - Commit: 572ff6b
 
 ---
 
