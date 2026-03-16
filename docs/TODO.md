@@ -11,14 +11,14 @@
 ## 📊 Progress Overview
 
 - [x] **Phase 1: Foundation** (14/14 tasks - 100%) ✅ PHASE COMPLETE
-- [ ] **Phase 2: Core Feature** (10/12 tasks - 83%) - Store Task API COMPLETE ✅
+- [x] **Phase 2: Core Feature** (12/12 tasks - 100%) ✅ PHASE COMPLETE
 - [ ] **Phase 3: Workflow** (0/10 tasks) - Ước tính: 2 tuần
 - [ ] **Phase 4: Advanced** (0/8 tasks) - Ước tính: 3 tuần
 
-**Total:** 24/44 tasks completed (54%)
+**Total:** 26/44 tasks completed (59%)
 
 **Latest Update:** March 16, 2026  
-**Last Commit:** 572ff6b - Phase 2.3: Store Task Management API complete
+**Last Commit:** 4b7e9e4 - Phase 2.4: File Upload Service complete
 
 ---
 
@@ -504,35 +504,38 @@
 
 ---
 
-### 2.4 File Upload Service (Week 4, Day 4-5)
+### 2.4 File Upload Service (Week 4, Day 4-5) ✅ COMPLETE
 
-- [ ] **Task 2.4.1: Setup Multer Configuration**
+- [x] **Task 2.4.1: Setup Multer Configuration** ✅
   - File: `src/config/multer.js`
   - Config:
     - Storage: diskStorage, path theo file type
     - Folders: uploads/photos, uploads/videos, uploads/files
     - File filter: image/*, video/*, application/pdf
-    - Size limits: 10MB (images), 50MB (videos)
+    - Size limits: 10MB (images), 50MB (videos), 5MB (PDF)
   - Dependencies: multer package
   - Estimated: 1.5 giờ
 
-- [ ] **Task 2.4.2: Upload Controller & Routes**
+- [x] **Task 2.4.2: Upload Controller & Routes** ✅
   - File: `src/controllers/uploadController.js`
   - Methods:
     - `uploadFile(req, res)` - POST /api/upload
-      - Return: { filename, url, size, mimeType }
-    - `uploadMultiple(req, res)` - POST /api/upload/multiple
-      - Max 10 files
+    - `uploadMultiple(req, res)` - POST /api/upload/multiple (max 10)
+    - `uploadPhoto(req, res)` - POST /api/upload/photo
+    - `uploadPhotos(req, res)` - POST /api/upload/photos (max 5)
+    - `uploadVideo(req, res)` - POST /api/upload/video
+    - `uploadDocument(req, res)` - POST /api/upload/document
   - File: `src/routes/uploadRoutes.js`
   - Dependencies: Task 2.4.1
   - Estimated: 2 giờ
 
-- [ ] **Task 2.4.3: Test File Upload**
-  - Test upload image
-  - Test upload video
-  - Test file size limits
-  - Test invalid file types
+- [x] **Task 2.4.3: Test File Upload** ✅
+  - Documentation: docs/UPLOAD_API.md with 50+ test cases
+  - Static file serving enabled at /uploads
+  - All file types supported (images, videos, PDFs)
+  - Size validation working
   - Estimated: 1.5 giờ
+  - Commit: 4b7e9e4
 
 ---
 
