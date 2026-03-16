@@ -10,12 +10,15 @@
 
 ## 📊 Progress Overview
 
-- [ ] **Phase 1: Foundation** (0/13 tasks) - Ước tính: 2 tuần
+- [x] **Phase 1: Foundation** (7/13 tasks - 54%) - Authentication & Authorization COMPLETE ✅
 - [ ] **Phase 2: Core Feature** (0/12 tasks) - Ước tính: 3 tuần  
 - [ ] **Phase 3: Workflow** (0/10 tasks) - Ước tính: 2 tuần
 - [ ] **Phase 4: Advanced** (0/8 tasks) - Ước tính: 3 tuần
 
-**Total:** 0/43 tasks completed
+**Total:** 7/43 tasks completed (16%)
+
+**Latest Update:** March 16, 2026  
+**Last Commit:** 0390f52 - [FIX] Authentication System - HMAC-SHA512 & Status Fix
 
 ---
 
@@ -25,78 +28,99 @@
 **Thời gian:** 1-2 tuần  
 **Priority:** CRITICAL ⚠️
 
-### 1.1 Authentication & Authorization (Week 1, Day 1-3)
+### 1.1 Authentication & Authorization (Week 1, Day 1-3) ✅ COMPLETED
 
-- [ ] **Task 1.1.1: Setup Authentication Helper Functions**
+- [x] **Task 1.1.1: Setup Authentication Helper Functions** ✅
   - File: `src/helpers/authHelper.js`
   - Functions cần tạo:
-    - `hashPassword(password, salt)` - SHA-512 hashing
+    - `hashPassword(password, salt)` - **HMAC-SHA512** (not simple SHA512)
     - `verifyPassword(employee, password)` - Verify password
     - `generateSalt()` - Random salt generation
     - `getEmployeeRole(employee)` - Lookup GroupUser và return role
+    - `isEmployeeActive(employee)` - Check Status = 'Đang hoạt động'
   - Dependencies: Mongoose models (Employee, GroupUser)
-  - Estimated: 2 giờ
+  - **Status:** DONE - Implemented with HMAC-SHA512
+  - Estimated: 2 giờ | Actual: 2 giờ
 
-- [ ] **Task 1.1.2: Create Mongoose Models**
+- [x] **Task 1.1.2: Create Mongoose Models** ✅
   - File: `src/models/Employee.js`
     - Schema cho Employee collection (dùng collection có sẵn)
     - Virtual field cho role (populate từ GroupUser)
-    - Methods: comparePassword, getRole
+    - Methods: comparePassword, getRole, isActive
+    - **Fix:** Status enum = ['Đang hoạt động', 'Đã dừng', 'Đã nghỉ việc']
   - File: `src/models/GroupUser.js`
     - Schema cho GroupUser collection
-    - Method: isAdmin(), isManager()
+    - Method: isAdmin(), isManager(), getRole()
   - File: `src/models/Brand.js`
     - Schema cho Brand collection
     - Virtual: manager (populate từ Employee)
+  - File: `src/models/index.js` - **BONUS:** Preload all models
   - Dependencies: None
-  - Estimated: 3 giờ
+  - **Status:** DONE - All models created with proper schema
+  - Estimated: 3 giờ | Actual: 4 giờ
 
-- [ ] **Task 1.1.3: JWT Token Service**
+- [x] **Task 1.1.3: JWT Token Service** ✅
   - File: `src/services/jwtService.js`
   - Functions:
     - `generateToken(employee)` - Create JWT with role info
     - `verifyToken(token)` - Validate JWT
     - `refreshToken(token)` - Renew token
-  - Config: JWT_SECRET, JWT_EXPIRE từ .env
+  - Config: ACCESS_TOKEN_SECRET=suachualaptop24h, JWT_EXPIRE từ .env
   - Dependencies: Task 1.1.1 (getEmployeeRole)
-  - Estimated: 2 giờ
+  - **Status:** DONE - JWT tokens working with role-based payload
+  - Estimated: 2 giờ | Actual: 2 giờ
 
-- [ ] **Task 1.1.4: Auth Controller - Login**
+- [x] **Task 1.1.4: Auth Controller - Login** ✅
   - File: `src/controllers/authController.js`
   - Endpoints:
     - `login(req, res)` - POST /api/auth/login
       - Input: { phone, password }
-      - Verify credentials
+      - Verify credentials with HMAC-SHA512
       - Get role from GroupUser
-      - Return: { employee, token }
+      - Return: { success, token, employee }
+    - `logout(req, res)` - POST /api/auth/logout
+    - `getMe(req, res)` - GET /api/auth/me
   - Dependencies: Task 1.1.1, 1.1.2, 1.1.3
-  - Estimated: 2 giờ
+  - **Status:** DONE - Login working with Phone authentication
+  - Estimated: 2 giờ | Actual: 3 giờ
 
-- [ ] **Task 1.1.5: Auth Middleware**
-  - File: `src/middlewares/authenticate.js`
+- [x] **Task 1.1.5: Auth Middleware** ✅
+  - File: `src/middlewares/authMiddleware.js`
     - `authenticate(req, res, next)` - Verify JWT token
     - Attach user info to req.user
-  - File: `src/middlewares/authorize.js`
+    - Check employee Status = 'Đang hoạt động'
     - `authorize(...roles)` - Check user role
     - Return 403 if unauthorized
   - Dependencies: Task 1.1.3
-  - Estimated: 1.5 giờ
+  - **Status:** DONE - Middleware protecting routes properly
+  - Estimated: 1.5 giờ | Actual: 1.5 giờ
 
-- [ ] **Task 1.1.6: Auth Routes**
+- [x] **Task 1.1.6: Auth Routes** ✅
   - File: `src/routes/authRoutes.js`
     - POST /api/auth/login
     - POST /api/auth/logout
     - GET /api/auth/me (get current user info)
   - Dependencies: Task 1.1.4, 1.1.5
-  - Estimated: 1 giờ
+  - **Status:** DONE - All routes functional
+  - Estimated: 1 giờ | Actual: 1 giờ
 
-- [ ] **Task 1.1.7: Test Authentication**
+- [x] **Task 1.1.7: Test Authentication** ✅
   - Test login với Phone + Password
   - Test JWT token generation
   - Test role mapping (admin/manager/employee)
   - Test middleware authentication
   - Test middleware authorization
-  - Estimated: 2 giờ
+  - **Status:** DONE - Tested with Phone 0392029548
+  - **UI Created:** Login page + 3 Dashboard pages (BONUS)
+  - Estimated: 2 giờ | Actual: 3 giờ
+
+**Section Status:** ✅ 7/7 tasks completed  
+**Critical Fixes Applied:**
+- HMAC-SHA512 password hashing (not simple SHA512)
+- Status field: 'Đang hoạt động' (not 'Đang làm việc')
+- Model preloading to prevent schema registration errors
+- Nodemon config fixed to watch src/**/*.js
+- CSP config for Tailwind CDN
 
 ---
 
@@ -727,10 +751,18 @@
 - Collection names: PascalCase (Employee, Brand)
 - Field names: snake_case cho existing, camelCase cho new
 - Always populate references khi return API
+- **Status field:** 'Đang hoạt động' (NOT 'Đang làm việc')
+
+### Authentication Conventions
+- **Password Hashing:** HMAC-SHA512 (NOT bcrypt, NOT simple SHA512)
+- **Formula:** `crypto.createHmac('sha512', salt).update(password).digest('hex')`
+- **Login:** Phone-based (10 digits, starts with 0)
+- **JWT Secret:** ACCESS_TOKEN_SECRET=suachualaptop24h
+- **Token Payload:** { userId, phone, fullName, role, branchId, groupUserId }
 
 ### Git Workflow
 - Feature branch: `feature/task-number-description`
-- Commit message: `[Task X.X.X] Description`
+- Commit message: `[Task X.X.X] Description` or `[FIX] Description`
 - PR title: `Phase X: Task Description`
 
 ### Testing
@@ -740,22 +772,65 @@
 
 ---
 
+## ⚠️ Critical Learnings (Phase 1.1)
+
+### Issues Encountered & Solutions
+
+**1. Password Hashing Algorithm**
+- ❌ **Wrong:** Simple SHA512 with concatenation `SHA512(password + salt)`
+- ✅ **Correct:** HMAC-SHA512 `crypto.createHmac('sha512', salt).update(password).digest('hex')`
+- **Root Cause:** Original system uses HMAC, not simple hash
+- **Fix Commit:** 0390f52
+
+**2. Employee Status Field**
+- ❌ **Wrong:** Enum ['Đang làm việc', 'Đã dừng']
+- ✅ **Correct:** Enum ['Đang hoạt động', 'Đã dừng', 'Đã nghỉ việc']
+- **Root Cause:** Database uses different status values
+- **Impact:** Login always failed with "Tài khoản đã ngừng hoạt động"
+- **Fix Commit:** 0390f52
+
+**3. Model Loading Order**
+- ❌ **Wrong:** Routes loaded before models → "Schema not registered for GroupUser"
+- ✅ **Correct:** Create `src/models/index.js` to preload all models, then load routes
+- **Root Cause:** Mongoose needs models registered before `.populate()`
+- **Fix Commit:** 0390f52
+
+**4. Nodemon Not Auto-Restarting**
+- ❌ **Wrong:** Watch paths `controllers/**/*.js`, `models/**/*.js`
+- ✅ **Correct:** Watch path `src/**/*.js`
+- **Root Cause:** Files are in `src/` folder, not root
+- **Fix:** Updated nodemon.json
+- **Fix Commit:** 0390f52
+
+**5. Content Security Policy (CSP)**
+- **Issue:** Tailwind CDN blocked by helmet.js CSP
+- **Solution:** Configure helmet with `scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.tailwindcss.com"]`
+- **Fix Commit:** 783d137
+
+---
+
 ## 🚀 Quick Start Commands
 
 ```bash
 # Development
 npm run dev
 
+# Test password hashing
+node test-hash.js [password] [salt]
+node test-hash.js "hethong24hfs123" "18900519"
+
 # Test specific feature
 npm test -- authController
 
 # Commit progress
 git add .
-git commit -m "[Task 1.1.1] Setup authentication helpers"
-git push origin feature/auth-system
+git commit -m "[Task 1.1.7] Test authentication complete"
+git push origin main
 ```
 
 ---
 
-**Last Updated:** March 16, 2026  
-**Next Task:** Task 1.1.1 - Setup Authentication Helper Functions
+**Last Updated:** March 16, 2026 - 21:30  
+**Next Task:** Task 1.2.1 - Employee Management Controller  
+**Current Phase:** Phase 1.1 ✅ COMPLETE | Phase 1.2 Starting  
+**Latest Commit:** [0390f52](https://github.com/hungnm3112/ProManage/commit/0390f52) - Authentication System Fixed
