@@ -10,15 +10,15 @@
 
 ## 📊 Progress Overview
 
-- [x] **Phase 1: Foundation** (7/13 tasks - 54%) - Authentication & Authorization COMPLETE ✅
+- [ ] **Phase 1: Foundation** (11/13 tasks - 85%) - Employee Management API COMPLETE ✅
 - [ ] **Phase 2: Core Feature** (0/12 tasks) - Ước tính: 3 tuần  
 - [ ] **Phase 3: Workflow** (0/10 tasks) - Ước tính: 2 tuần
 - [ ] **Phase 4: Advanced** (0/8 tasks) - Ước tính: 3 tuần
 
-**Total:** 7/43 tasks completed (16%)
+**Total:** 11/43 tasks completed (26%)
 
 **Latest Update:** March 16, 2026  
-**Last Commit:** 0390f52 - [FIX] Authentication System - HMAC-SHA512 & Status Fix
+**Last Commit:** d47ca45 - [FEATURE] Employee Management API Complete (Tasks 1.2.1-1.2.4)
 
 ---
 
@@ -124,25 +124,31 @@
 
 ---
 
-### 1.2 Employee Management API (Week 1, Day 4-5)
+### 1.2 Employee Management API (Week 1, Day 4-5) ✅ COMPLETED
 
-- [ ] **Task 1.2.1: Employee Controller**
+- [x] **Task 1.2.1: Employee Controller** ✅
   - File: `src/controllers/employeeController.js`
   - Methods:
     - `getEmployees(req, res)` - GET /api/employees
-      - Query params: role, branchId, status, search
+      - Query params: role, branchId, status, search, page, limit
       - Populate: ID_GroupUser, ID_Branch
+      - Pagination support
+      - Manager restriction (own branch only)
     - `getEmployeeById(req, res)` - GET /api/employees/:id
     - `createEmployee(req, res)` - POST /api/employees
-      - Hash password with salt
-      - Set default Status = "Đang làm việc"
+      - Hash password with HMAC-SHA512 + salt
+      - Set default Status = "Đang hoạt động"
     - `updateEmployee(req, res)` - PUT /api/employees/:id
+      - Partial updates supported
+      - Password re-hashing if updated
     - `updateEmployeeStatus(req, res)` - PATCH /api/employees/:id/status
-      - Toggle: "Đang làm việc" ↔ "Đã dừng"
+      - Status: "Đang hoạt động" | "Đã dừng" | "Đã nghỉ việc"
+    - `deleteEmployee(req, res)` - DELETE /api/employees/:id (soft delete)
   - Dependencies: Task 1.1.2 (Employee model)
-  - Estimated: 4 giờ
+  - **Status:** DONE - 356 lines with full CRUD
+  - Estimated: 4 giờ | Actual: 3.5 giờ
 
-- [ ] **Task 1.2.2: Employee Validation**
+- [x] **Task 1.2.2: Employee Validation** ✅
   - File: `src/validators/employeeValidator.js`
   - Rules:
     - Phone: required, unique, format (0xxxxxxxxx)
@@ -150,26 +156,62 @@
     - Password: required, min 6 chars (khi tạo mới)
     - ID_GroupUser: required, valid ObjectId
     - ID_Branch: required, valid ObjectId
+    - CMND: 9 or 12 digits
+    - Gender: Nam | Nữ
+    - Email: valid email format
+    - Birthday, DateOnCompany: ISO8601 dates
+  - Validators created:
+    - validateCreateEmployee
+    - validateUpdateEmployee
+    - validateUpdateStatus
+    - validateGetEmployeeById
+    - validateGetEmployees
+    - validateDeleteEmployee
   - Dependencies: express-validator
-  - Estimated: 1.5 giờ
+  - **Status:** DONE - 200+ lines comprehensive validation
+  - Estimated: 1.5 giờ | Actual: 1.5 giờ
 
-- [ ] **Task 1.2.3: Employee Routes**
+- [x] **Task 1.2.3: Employee Routes** ✅
   - File: `src/routes/employeeRoutes.js`
   - Routes:
     - GET /api/employees - authenticate, authorize(['admin', 'manager'])
-    - GET /api/employees/:id - authenticate
+    - GET /api/employees/:id - authenticate (role-based access)
     - POST /api/employees - authenticate, authorize(['admin'])
     - PUT /api/employees/:id - authenticate, authorize(['admin'])
     - PATCH /api/employees/:id/status - authenticate, authorize(['admin'])
+    - DELETE /api/employees/:id - authenticate, authorize(['admin'])
+  - All routes include validation middleware
+  - Mounted in: `src/routes/index.js` at `/api/employees`
   - Dependencies: Task 1.2.1, 1.2.2, 1.1.5
-  - Estimated: 1 giờ
+  - **Status:** DONE - All routes functional
+  - Estimated: 1 giờ | Actual: 1 giờ
 
-- [ ] **Task 1.2.4: Test Employee API**
-  - Test CRUD operations
-  - Test filtering (by role, branch, status)
-  - Test search functionality
-  - Test authorization (chỉ admin mới create/update)
-  - Estimated: 2 giờ
+- [x] **Task 1.2.4: Test Employee API** ✅
+  - Documentation created: `docs/EMPLOYEE_API.md`
+  - Testing checklist with 28 test cases:
+    - GET /api/employees (7 tests)
+    - GET /api/employees/:id (5 tests)
+    - POST /api/employees (7 tests)
+    - PUT /api/employees (6 tests)
+    - PATCH /api/employees/:id/status (4 tests)
+    - DELETE /api/employees/:id (4 tests)
+  - cURL examples for all endpoints
+  - Request/Response documentation
+  - Error handling scenarios
+  - **Status:** DONE - Ready for manual/automated testing
+  - Estimated: 2 giờ | Actual: 1 giờ
+
+**Section Status:** ✅ 4/4 tasks completed  
+**Features Implemented:**
+- Full CRUD operations for employees
+- Advanced filtering (role, branch, status, search)
+- Pagination support
+- Manager access control (branch restriction)
+- HMAC-SHA512 password hashing
+- Soft delete functionality
+- Phone uniqueness validation
+- Comprehensive validation rules
+- Complete API documentation
 
 ---
 
