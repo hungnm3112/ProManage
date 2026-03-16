@@ -49,6 +49,7 @@ app.use(cookieParser()); // Parse cookies
 
 // Static files
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // View engine setup (if using server-side rendering)
 app.set('view engine', 'ejs');
