@@ -1,0 +1,38 @@
+{
+  "watch": [
+    "server.js",
+    "app.js",
+    "routes/**/*.js",
+    "controllers/**/*.js",
+    "models/**/*.js",
+    "middleware/**/*.js",
+    "config/**/*.js",
+    "helpers/**/*.js",
+    "services/**/*.js",
+    "utils/**/*.js"
+  ],
+  "ignore": [
+    "node_modules/**",
+    "uploads/**",
+    "logs/**",
+    "test/**",
+    "tests/**",
+    "*.test.js",
+    "*.spec.js",
+    "docs/**",
+    "public/**",
+    ".git/**",
+    "coverage/**"
+  ],
+  "ext": "js,json",
+  "delay": 1000,
+  "env": {
+    "NODE_ENV": "development"
+  },
+  "verbose": true,
+  "restartable": "rs",
+  "colours": true,
+  "execMap": {
+    "js": "node"
+  }
+}

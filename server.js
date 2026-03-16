@@ -1,0 +1,66 @@
+require('dotenv').config();
+const express = require('express');
+const path = require('path');
+const cookieParser = require('cookie-parser');
+const cors = require('cors');
+const helmet = require('helmet');
+const morgan = require('morgan');
+const compression = require('compression');
+
+const connectDB = require('./src/config/database');
+const routes = require('./src/routes');
+const errorHandler = require('./src/middlewares/errorHandler');
+const logger = require('./src/middlewares/logger');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Connect to Database
+connectDB();
+
+// Middleware
+app.use(helmet()); // Security headers
+app.use(cors()); // Enable CORS
+app.use(compression()); // Compress responses
+app.use(morgan('combined', { stream: logger.stream })); // HTTP request logger
+app.use(express.json()); // Parse JSON bodies
+app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
+app.use(cookieParser()); // Parse cookies
+
+// Static files
+app.use(express.static(path.join(__dirname, 'public')));
+
+// View engine setup (if using server-side rendering)
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, 'src/views'));
+
+// Routes
+app.use('/api', routes);
+
+// Home route
+app.get('/', (req, res) => {
+  res.json({
+    message: 'Welcome to ProManage API',
+    version: '1.0.0',
+    status: 'running'
+  });
+});
+
+// 404 handler
+app.use((req, res, next) => {
+  res.status(404).json({
+    success: false,
+    message: 'Route not found'
+  });
+});
+
+// Error handler (must be last)
+app.use(errorHandler);
+
+// Start server
+app.listen(PORT, () => {
+  console.log(`🚀 Server is running on port ${PORT}`);
+  console.log(`📍 Environment: ${process.env.NODE_ENV || 'development'}`);
+});
+
+module.exports = app;

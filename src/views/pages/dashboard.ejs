@@ -1,0 +1,38 @@
+<div class="dashboard">
+  <h1>Dashboard</h1>
+  
+  <div class="stats-grid">
+    <div class="stat-card">
+      <h3>Total Projects</h3>
+      <p class="stat-number"><%= stats.totalProjects || 0 %></p>
+    </div>
+    <div class="stat-card">
+      <h3>Active Tasks</h3>
+      <p class="stat-number"><%= stats.activeTasks || 0 %></p>
+    </div>
+    <div class="stat-card">
+      <h3>Team Members</h3>
+      <p class="stat-number"><%= stats.teamMembers || 0 %></p>
+    </div>
+    <div class="stat-card">
+      <h3>Completed Tasks</h3>
+      <p class="stat-number"><%= stats.completedTasks || 0 %></p>
+    </div>
+  </div>
+
+  <section class="recent-projects">
+    <h2>Recent Projects</h2>
+    <% if (projects && projects.length > 0) { %>
+      <ul class="project-list">
+        <% projects.forEach(project => { %>
+          <li>
+            <a href="/projects/<%= project._id %>"><%= project.name %></a>
+            <span class="badge <%= project.status %>"><%= project.status %></span>
+          </li>
+        <% }) %>
+      </ul>
+    <% } else { %>
+      <p>No projects found</p>
+    <% } %>
+  </section>
+</div>
