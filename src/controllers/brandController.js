@@ -9,7 +9,7 @@
 const Brand = require('../models/Brand');
 const Employee = require('../models/Employee');
 const { getEmployeeRole } = require('../helpers/authHelper');
-const { successResponse, errorResponse } = require('../helpers/responseHandler');
+const { sendSuccess, sendError } = require('../utils/responseHandler');
 
 /**
  * @route   GET /api/brands
@@ -64,7 +64,7 @@ const getBrands = async (req, res) => {
     const hasNextPage = page < totalPages;
     const hasPrevPage = page > 1;
     
-    return successResponse(res, {
+    return sendSuccess(res, 'Brands fetched successfully', {
       brands,
       pagination: {
         total,
@@ -74,10 +74,10 @@ const getBrands = async (req, res) => {
         hasNextPage,
         hasPrevPage
       }
-    }, 'Brands fetched successfully');
+    });
   } catch (error) {
     console.error('getBrands error:', error);
-    return errorResponse(res, error.message, 500);
+    return sendError(res, error.message, 500);
   }
 };
 
@@ -103,13 +103,13 @@ const getBrandById = async (req, res) => {
       .lean();
     
     if (!brand) {
-      return errorResponse(res, 'Brand not found', 404);
+      return sendError(res, 'Brand not found', 404);
     }
     
-    return successResponse(res, { brand }, 'Brand fetched successfully');
+    return sendSuccess(res, 'Brand fetched successfully', { brand });
   } catch (error) {
     console.error('getBrandById error:', error);
-    return errorResponse(res, error.message, 500);
+    return sendError(res, error.message, 500);
   }
 };
 
@@ -133,7 +133,7 @@ const getBrandEmployees = async (req, res) => {
     
     // Manager can only see their own branch employees
     if (currentUserRole === 'manager' && currentUser.ID_Branch.toString() !== id) {
-      return errorResponse(res, 'You can only view employees of your own branch', 403);
+      return sendError(res, 'You can only view employees of your own branch', 403);
     }
     
     // Get all active employees of this branch
@@ -146,17 +146,17 @@ const getBrandEmployees = async (req, res) => {
       .select('-Password -Salt -__v')
       .lean();
     
-    return successResponse(res, {
+    return sendSuccess(res, 'Brand employees fetched successfully', {
       brand: {
         _id: brand._id,
         Name: brand.Name
       },
       employees,
       total: employees.length
-    }, 'Brand employees fetched successfully');
+    });
   } catch (error) {
     console.error('getBrandEmployees error:', error);
-    return errorResponse(res, error.message, 500);
+    return sendError(res, error.message, 500);
   }
 };
 
@@ -198,7 +198,7 @@ const updateBrand = async (req, res) => {
     
     // Check if there are any updates
     if (Object.keys(updates).length === 0) {
-      return errorResponse(res, 'No valid update fields provided', 400);
+      return sendError(res, 'No valid update fields provided', 400);
     }
     
     // Update brand
@@ -211,18 +211,18 @@ const updateBrand = async (req, res) => {
       .lean();
     
     if (!brand) {
-      return errorResponse(res, 'Brand not found', 404);
+      return sendError(res, 'Brand not found', 404);
     }
     
-    return successResponse(res, { brand }, 'Brand updated successfully');
+    return sendSuccess(res, 'Brand updated successfully', { brand });
   } catch (error) {
     console.error('updateBrand error:', error);
     
     if (error.name === 'ValidationError') {
-      return errorResponse(res, error.message, 400);
+      return sendError(res, error.message, 400);
     }
     
-    return errorResponse(res, error.message, 500);
+    return sendError(res, error.message, 500);
   }
 };
 
@@ -239,30 +239,30 @@ const assignManager = async (req, res) => {
     
     // Validate employeeId
     if (!employeeId) {
-      return errorResponse(res, 'Employee ID is required', 400);
+      return sendError(res, 'Employee ID is required', 400);
     }
     
     // Check if brand exists
     const brand = await Brand.findById(id);
     if (!brand) {
-      return errorResponse(res, 'Brand not found', 404);
+      return sendError(res, 'Brand not found', 404);
     }
     
     // Check if employee exists
     const employee = await Employee.findById(employeeId).populate('ID_GroupUser');
     if (!employee) {
-      return errorResponse(res, 'Employee not found', 404);
+      return sendError(res, 'Employee not found', 404);
     }
     
     // Check if employee is active
     if (employee.Status !== 'Đang hoạt động') {
-      return errorResponse(res, 'Employee must be active to be assigned as manager', 400);
+      return sendError(res, 'Employee must be active to be assigned as manager', 400);
     }
     
     // Check if employee has manager role
     const employeeRole = await getEmployeeRole(employee);
     if (employeeRole !== 'manager') {
-      return errorResponse(res, 'Employee must have manager role to be assigned as manager', 400);
+      return sendError(res, 'Employee must have manager role to be assigned as manager', 400);
     }
     
     // Check if this employee is already a manager of another branch
@@ -284,7 +284,7 @@ const assignManager = async (req, res) => {
       }
       
       if (!hasOtherManager) {
-        return errorResponse(
+        return sendError(
           res,
           'Cannot reassign this manager. Their current branch has no other managers.',
           400
@@ -303,16 +303,16 @@ const assignManager = async (req, res) => {
       .select('-Password -Salt -__v')
       .lean();
     
-    return successResponse(res, {
+    return sendSuccess(res, 'Manager assigned successfully', {
       brand: {
         _id: brand._id,
         Name: brand.Name
       },
       manager: updatedEmployee
-    }, 'Manager assigned successfully');
+    });
   } catch (error) {
     console.error('assignManager error:', error);
-    return errorResponse(res, error.message, 500);
+    return sendError(res, error.message, 500);
   }
 };
 

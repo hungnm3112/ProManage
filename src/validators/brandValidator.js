@@ -7,7 +7,7 @@
  */
 
 const { body, param, query, validationResult } = require('express-validator');
-const { errorResponse } = require('../helpers/responseHandler');
+const { sendError } = require('../utils/responseHandler');
 const mongoose = require('mongoose');
 
 /**
@@ -17,7 +17,7 @@ const validate = (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     const errorMessages = errors.array().map(err => err.msg).join(', ');
-    return errorResponse(res, errorMessages, 400);
+    return sendError(res, errorMessages, 400);
   }
   next();
 };
