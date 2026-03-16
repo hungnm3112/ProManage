@@ -59,7 +59,7 @@ brandSchema.virtual('manager', {
   localField: '_id',
   foreignField: 'ID_Branch',
   justOne: true,
-  match: { Status: 'Đang làm việc' }
+  match: { Status: 'Đang hoạt động' }
 });
 
 // Method: Check if active
@@ -72,7 +72,7 @@ brandSchema.methods.getEmployees = async function() {
   const Employee = mongoose.model('Employee');
   return await Employee.find({
     ID_Branch: this._id,
-    Status: 'Đang làm việc'
+    Status: 'Đang hoạt động'
   });
 };
 

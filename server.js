@@ -8,7 +8,6 @@ const morgan = require('morgan');
 const compression = require('compression');
 
 const connectDB = require('./src/config/database');
-const routes = require('./src/routes');
 const errorHandler = require('./src/middlewares/errorHandler');
 const logger = require('./src/middlewares/logger');
 
@@ -18,8 +17,29 @@ const PORT = process.env.PORT || 3000;
 // Connect to Database
 connectDB();
 
+// Load all models (ensures they are registered before routes use them)
+require('./src/models');
+
+// Load routes (after models are registered)
+const routes = require('./src/routes');
+
 // Middleware
-app.use(helmet()); // Security headers
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.tailwindcss.com"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'"],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'none'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false,
+})); // Security headers with CSP config
 app.use(cors()); // Enable CORS
 app.use(compression()); // Compress responses
 app.use(morgan('combined', { stream: logger.stream })); // HTTP request logger

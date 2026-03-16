@@ -2,7 +2,140 @@
 
 > Core business logic và workflows
 
-## � Database Adapter Layer
+## 🔐 Authentication System
+
+### Password Hashing - HMAC-SHA512
+
+Hệ thống sử dụng **HMAC-SHA512** với Salt (KHÔNG dùng bcrypt).
+
+```javascript
+const crypto = require('crypto');
+
+/**
+ * Hash password với HMAC-SHA512
+ * @param {string} password - Plain text password
+ * @param {string} salt - Salt từ database (8 ký tự)
+ * @returns {string} - Hashed password (128 hex chars)
+ */
+function hashPassword(password, salt) {
+  const hash = crypto.createHmac('sha512', salt);
+  hash.update(password);
+  return hash.digest('hex');
+}
+
+/**
+ * Verify password
+ * @param {Object} employee - Employee document with Password & Salt fields
+ * @param {string} password - Plain text password to verify
+ * @returns {boolean}
+ */
+function verifyPassword(employee, password) {
+  const hashed = hashPassword(password, employee.Salt);
+  return hashed === employee.Password;
+}
+```
+
+### Login Flow
+
+```javascript
+async function login(phone, password) {
+  // 1. Find employee by phone (include Password & Salt)
+  const employee = await Employee.findOne({ Phone: phone })
+    .select('+Password +Salt')
+    .populate('ID_GroupUser')
+    .populate('ID_Branch');
+  
+  if (!employee) {
+    throw new Error('Số điện thoại hoặc mật khẩu không đúng');
+  }
+  
+  // 2. Check active status
+  if (employee.Status !== 'Đang hoạt động') {
+    throw new Error('Tài khoản đã ngừng hoạt động');
+  }
+  
+  // 3. Verify password (HMAC-SHA512)
+  const isValid = verifyPassword(employee, password);
+  if (!isValid) {
+    throw new Error('Số điện thoại hoặc mật khẩu không đúng');
+  }
+  
+  // 4. Get role from GroupUser
+  const role = await getEmployeeRole(employee);
+  
+  // 5. Generate JWT token
+  const token = generateToken(employee, role);
+  
+  return { token, employee, role };
+}
+```
+
+### Role Mapping
+
+```javascript
+/**
+ * Get employee role từ GroupUser.Name
+ * @param {Object} employee - Employee document (có ID_GroupUser)
+ * @returns {Promise<string>} - 'admin' | 'manager' | 'employee'
+ */
+async function getEmployeeRole(employee) {
+  // Handle both populated and non-populated ID_GroupUser
+  let groupUser;
+  
+  if (employee.ID_GroupUser && typeof employee.ID_GroupUser === 'object' && employee.ID_GroupUser.Name) {
+    // Already populated
+    groupUser = employee.ID_GroupUser;
+  } else if (employee.ID_GroupUser) {
+    // Not populated, need to query
+    groupUser = await GroupUserModel.findById(employee.ID_GroupUser);
+  }
+  
+  // Check validity
+  if (!groupUser || groupUser.Status !== '1') {
+    return 'employee';  // Default role
+  }
+  
+  const positionName = groupUser.Name;
+  
+  // Admin positions (5 roles)
+  const adminPositions = [
+    'Tổng giám đốc',
+    'Kho tổng',
+    'Phó tổng giám đốc',
+    'Giám đốc khu vực',
+    'Phó giám đốc'
+  ];
+  
+  if (adminPositions.includes(positionName)) {
+    return 'admin';
+  }
+  
+  // Manager position
+  if (positionName === 'Giám đốc chi nhánh') {
+    return 'manager';
+  }
+  
+  // Default: employee
+  return 'employee';
+}
+```
+
+### Active Status Check
+
+```javascript
+/**
+ * Check if employee is active
+ * @param {Object} employee - Employee document
+ * @returns {boolean}
+ */
+function isEmployeeActive(employee) {
+  return employee.Status === 'Đang hoạt động';
+}
+```
+
+---
+
+## Database Adapter Layer
 
 ### Mapping Schema cũ → Schema mới
 
@@ -49,17 +182,16 @@ async function getEmployeeRole(employee) {
 
 // Helper: Check if employee is active
 function isEmployeeActive(employee) {
-  return employee.Status === 'Đang làm việc';
+  return employee.Status === 'Đang hoạt động';
 }
 
-// Helper: Verify password (SHA-512 + Salt, không phải bcrypt)
+// Helper: Verify password (HMAC-SHA512 + Salt, không phải bcrypt)
 const crypto = require('crypto');
 
 function hashPassword(password, salt) {
-  return crypto
-    .createHash('sha512')
-    .update(password + salt)
-    .digest('hex');
+  const hash = crypto.createHmac('sha512', salt);
+  hash.update(password);
+  return hash.digest('hex');
 }
 
 function verifyPassword(employee, password) {
@@ -71,7 +203,7 @@ function verifyPassword(employee, password) {
 async function getBrandManager(brandId) {
   const manager = await EmployeeModel.findOne({
     ID_Branch: brandId,
-    Status: 'Đang làm việc'
+    Status: 'Đang hoạt động'
   });
   
   const role = await getEmployeeRole(manager);
@@ -136,7 +268,7 @@ async function publishBroadcast(broadcastId) {
   // Send notifications to managers (từ Employee collection)
   const managers = await EmployeeModel.find({
     ID_Branch: { $in: broadcast.assignedStores },  // assignedStores = brandIds
-    Status: 'Đang làm việc'
+    Status: 'Đang hoạt động'
   });
   
   // Filter only managers by checking ID_GroupUser
@@ -229,7 +361,7 @@ async function assignToEmployees(managerId, storeTaskId, employeeIds, note) {
   const employees = await EmployeeModel.find({
     _id: { $in: employeeIds },
     ID_Branch: manager.ID_Branch,
-    Status: 'Đang làm việc'
+    Status: 'Đang hoạt động'
   });
   
   if (employees.length !== employeeIds.length) {
@@ -455,7 +587,7 @@ async function submitTask(employeeId, userTaskId, overallNote) {
   const employee = await EmployeeModel.findById(employeeId);
   const manager = await EmployeeModel.findOne({
     ID_Branch: employee.ID_Branch,
-    Status: 'Đang làm việc'
+    Status: 'Đang hoạt động'
   });
   
   // Verify is manager
@@ -619,7 +751,7 @@ async function calculateBrandPerformance(brandId, startDate, endDate) {
   // Get all employees for this brand
   const employees = await EmployeeModel.find({ 
     ID_Branch: brandId,
-    Status: 'Đang làm việc'
+    Status: 'Đang hoạt động'
   }).distinct('_id');
   
   const userTasks = await UserTask.find({

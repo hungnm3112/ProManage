@@ -1,29 +1,29 @@
 /**
  * Authentication Helper Functions
  * 
- * Hệ thống sử dụng SHA-512 + Salt cho password hashing
- * (KHÔNG dùng bcrypt như các hệ thống khác)
+ * Hệ thống sử dụng HMAC-SHA512 cho password hashing
+ * (KHÔNG phải bcrypt hay SHA512 thông thường)
  */
 
 const crypto = require('crypto');
-const mongoose = require('mongoose');
+const GroupUser = require('../models/GroupUser');
 
 /**
- * Hash password với Salt sử dụng SHA-512
+ * Hash password với Salt sử dụng HMAC-SHA512
  * 
  * @param {string} password - Plain text password
  * @param {string} salt - Salt string (8 ký tự)
- * @returns {string} - Hashed password (SHA-512 hex)
+ * @returns {string} - Hashed password (HMAC-SHA512 hex)
  * 
  * @example
  * const hashed = hashPassword('123456', '18900519');
  * // Returns: '60e19e09aafe50653f66819304b8cb329f427a4f...'
  */
 function hashPassword(password, salt) {
-  return crypto
-    .createHash('sha512')
-    .update(password + salt)
-    .digest('hex');
+  // HMAC-SHA512 (not simple SHA512)
+  const hash = crypto.createHmac('sha512', salt);
+  hash.update(password);
+  return hash.digest('hex');
 }
 
 /**
@@ -71,9 +71,16 @@ function generateSalt() {
  */
 async function getEmployeeRole(employee) {
   try {
-    // Tra bảng GroupUser để lấy tên chức vụ
-    const GroupUser = mongoose.model('GroupUser');
-    const groupUser = await GroupUser.findById(employee.ID_GroupUser);
+    // Check if ID_GroupUser already populated
+    let groupUser;
+    
+    if (employee.ID_GroupUser && typeof employee.ID_GroupUser === 'object' && employee.ID_GroupUser.Name) {
+      // Already populated
+      groupUser = employee.ID_GroupUser;
+    } else if (employee.ID_GroupUser) {
+      // Not populated, need to query
+      groupUser = await GroupUser.findById(employee.ID_GroupUser);
+    }
     
     // Nếu không tìm thấy hoặc không active
     if (!groupUser || groupUser.Status !== '1') {
@@ -109,16 +116,16 @@ async function getEmployeeRole(employee) {
 }
 
 /**
- * Check if employee is active (đang làm việc)
+ * Check if employee is active (đang hoạt động)
  * 
  * @param {Object} employee - Employee document
- * @returns {boolean} - true nếu Status === 'Đang làm việc'
+ * @returns {boolean} - true nếu Status === 'Đang hoạt động'
  * 
  * @example
  * const isActive = isEmployeeActive(employee);
  */
 function isEmployeeActive(employee) {
-  return employee.Status === 'Đang làm việc';
+  return employee.Status === 'Đang hoạt động';
 }
 
 module.exports = {

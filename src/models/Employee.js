@@ -52,8 +52,8 @@ const employeeSchema = new mongoose.Schema({
   DateOnCompany: String,
   Status: {
     type: String,
-    enum: ['Đang làm việc', 'Đã dừng'],
-    default: 'Đang làm việc'
+    enum: ['Đang hoạt động', 'Đã dừng', 'Đã nghỉ việc'],
+    default: 'Đang hoạt động'
   },
   Gender: {
     type: String,
@@ -125,7 +125,7 @@ employeeSchema.methods.getRole = async function() {
 
 // Method: Check if active
 employeeSchema.methods.isActive = function() {
-  return this.Status === 'Đang làm việc';
+  return this.Status === 'Đang hoạt động';
 };
 
 const Employee = mongoose.model('Employee', employeeSchema);

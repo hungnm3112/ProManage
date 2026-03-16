@@ -5,6 +5,8 @@
  */
 
 const Employee = require('../models/Employee');
+const GroupUser = require('../models/GroupUser');
+const Brand = require('../models/Brand');
 const { verifyPassword, getEmployeeRole, isEmployeeActive } = require('../helpers/authHelper');
 const { generateToken } = require('../services/jwtService');
 const { sendResponse, sendError } = require('../utils/responseHandler');

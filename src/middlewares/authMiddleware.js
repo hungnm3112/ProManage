@@ -50,7 +50,7 @@ exports.authenticate = async (req, res, next) => {
         return sendError(res, 'Tài khoản không tồn tại', 404);
       }
 
-      if (employee.Status !== 'Đang làm việc') {
+      if (employee.Status !== 'Đang hoạt động') {
         return sendError(res, 'Tài khoản đã ngừng hoạt động', 403);
       }
 
