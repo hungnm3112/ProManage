@@ -89,9 +89,30 @@ const validateRejectStoreTask = [
   validate
 ];
 
+/**
+ * Validator for assign employees to store task
+ * POST /api/store-tasks/:id/assign
+ */
+const validateAssignEmployees = [
+  param('id')
+    .isMongoId()
+    .withMessage('Invalid store task ID format'),
+  
+  body('employeeIds')
+    .isArray({ min: 1 })
+    .withMessage('Employee IDs must be a non-empty array'),
+  
+  body('employeeIds.*')
+    .isMongoId()
+    .withMessage('Each employee ID must be a valid MongoDB ObjectId'),
+  
+  validate
+];
+
 module.exports = {
   validateGetStoreTasks,
   validateGetStoreTaskById,
   validateAcceptStoreTask,
-  validateRejectStoreTask
+  validateRejectStoreTask,
+  validateAssignEmployees
 };

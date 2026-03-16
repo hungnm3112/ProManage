@@ -69,4 +69,18 @@ router.put(
   storeTaskController.rejectStoreTask
 );
 
+/**
+ * @route   POST /api/store-tasks/:id/assign
+ * @desc    Assign employees to a store task
+ * @access  Private (manager only)
+ * @note    Creates UserTask for each employee
+ */
+router.post(
+  '/:id/assign',
+  authenticate,
+  authorize(['manager']),
+  storeTaskValidator.validateAssignEmployees,
+  storeTaskController.assignEmployees
+);
+
 module.exports = router;

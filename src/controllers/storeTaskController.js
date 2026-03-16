@@ -9,6 +9,7 @@
 const StoreTask = require('../models/StoreTask');
 const Broadcast = require('../models/Broadcast');
 const Employee = require('../models/Employee');
+const UserTask = require('../models/UserTask');
 const { sendSuccess, sendError } = require('../utils/responseHandler');
 const { getEmployeeRole } = require('../helpers/authHelper');
 
@@ -242,9 +243,149 @@ const rejectStoreTask = async (req, res) => {
   }
 };
 
+/**
+ * @route   POST /api/store-tasks/:id/assign
+ * @desc    Assign employees to a store task
+ * @access  Private (manager only)
+ * @body    {string[]} employeeIds - Array of employee IDs to assign
+ * @note    Creates UserTask for each employee
+ */
+const assignEmployees = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { employeeIds } = req.body;
+    const currentUser = req.user;
+    
+    // Validate input
+    if (!employeeIds || !Array.isArray(employeeIds) || employeeIds.length === 0) {
+      return sendError(res, 'Employee IDs array is required', 400);
+    }
+    
+    // Find store task
+    const storeTask = await StoreTask.findById(id)
+      .populate('broadcastId')
+      .populate('storeId', 'Name');
+    
+    if (!storeTask) {
+      return sendError(res, 'Store task not found', 404);
+    }
+    
+    // Verify this is the manager of the store
+    if (storeTask.managerId.toString() !== currentUser._id.toString()) {
+      return sendError(res, 'Only the assigned manager can assign employees', 403);
+    }
+    
+    // Task must be accepted before assigning employees
+    if (storeTask.status !== 'accepted') {
+      return sendError(res, 'Store task must be accepted before assigning employees', 400);
+    }
+    
+    // Fetch all employees
+    const employees = await Employee.find({ _id: { $in: employeeIds } });
+    
+    if (employees.length !== employeeIds.length) {
+      return sendError(res, 'One or more employee IDs are invalid', 400);
+    }
+    
+    // Validate all employees belong to the same branch
+    const invalidEmployees = employees.filter(emp => 
+      emp.ID_Branch.toString() !== storeTask.storeId._id.toString()
+    );
+    
+    if (invalidEmployees.length > 0) {
+      return sendError(res, 
+        `Employees must belong to the same branch as the store task. Invalid: ${invalidEmployees.map(e => e.FullName).join(', ')}`, 
+        400
+      );
+    }
+    
+    // Check if employees are active
+    const inactiveEmployees = employees.filter(emp => emp.Status !== 'Đang hoạt động');
+    if (inactiveEmployees.length > 0) {
+      return sendError(res, 
+        `Cannot assign inactive employees: ${inactiveEmployees.map(e => e.FullName).join(', ')}`, 
+        400
+      );
+    }
+    
+    // Create UserTask for each employee
+    const userTasks = [];
+    const broadcast = storeTask.broadcastId;
+    
+    for (const employee of employees) {
+      // Check if employee already assigned
+      const existingTask = await UserTask.findOne({
+        storeTaskId: storeTask._id,
+        employeeId: employee._id
+      });
+      
+      if (existingTask) {
+        continue; // Skip if already assigned
+      }
+      
+      // Copy checklist from broadcast
+      const checklist = broadcast.checklist.map(item => ({
+        task: item.task,
+        note: item.note || '',
+        required: item.required,
+        isCompleted: false
+      }));
+      
+      // Create UserTask
+      const userTask = await UserTask.create({
+        storeTaskId: storeTask._id,
+        broadcastId: broadcast._id,
+        employeeId: employee._id,
+        checklist: checklist,
+        evidences: [],
+        status: 'assigned'
+      });
+      
+      userTasks.push(userTask);
+    }
+    
+    // Update StoreTask assignedEmployees
+    const currentAssignedIds = storeTask.assignedEmployees.map(id => id.toString());
+    const newEmployeeIds = employeeIds.filter(id => !currentAssignedIds.includes(id));
+    
+    storeTask.assignedEmployees.push(...newEmployeeIds);
+    
+    // Update status to in_progress if not already
+    if (storeTask.status === 'accepted') {
+      storeTask.status = 'in_progress';
+      storeTask.startedAt = new Date();
+    }
+    
+    await storeTask.save();
+    
+    // Populate for response
+    await storeTask.populate([
+      { path: 'assignedEmployees', select: 'FullName Phone Email' }
+    ]);
+    
+    return sendSuccess(res, 
+      `${userTasks.length} employee(s) assigned successfully`, 
+      { 
+        storeTask,
+        assignedCount: userTasks.length,
+        userTasks: userTasks.map(ut => ({
+          _id: ut._id,
+          employeeId: ut.employeeId,
+          status: ut.status,
+          checklistItems: ut.checklist.length
+        }))
+      }
+    );
+  } catch (error) {
+    console.error('assignEmployees error:', error);
+    return sendError(res, error.message, 500);
+  }
+};
+
 module.exports = {
   getStoreTasks,
   getStoreTaskById,
   acceptStoreTask,
-  rejectStoreTask
+  rejectStoreTask,
+  assignEmployees
 };
