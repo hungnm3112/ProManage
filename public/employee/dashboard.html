@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Employee Dashboard - ProManage</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100">
+  <nav class="bg-white shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between h-16">
+        <div class="flex items-center">
+          <h1 class="text-xl font-bold text-purple-600">ProManage</h1>
+          <span class="ml-4 px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-semibold">Employee</span>
+        </div>
+        <div class="flex items-center">
+          <span id="userName" class="mr-4 text-gray-700"></span>
+          <button onclick="logout()" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded">
+            Đăng xuất
+          </button>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <h2 class="text-3xl font-bold text-gray-900 mb-6">Dashboard Nhân Viên</h2>
+    
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div class="bg-white p-6 rounded-lg shadow">
+        <h3 class="text-gray-500 text-sm font-medium">Assigned Tasks</h3>
+        <p class="text-3xl font-bold text-blue-600 mt-2">0</p>
+      </div>
+      <div class="bg-white p-6 rounded-lg shadow">
+        <h3 class="text-gray-500 text-sm font-medium">In Progress</h3>
+        <p class="text-3xl font-bold text-orange-600 mt-2">0</p>
+      </div>
+      <div class="bg-white p-6 rounded-lg shadow">
+        <h3 class="text-gray-500 text-sm font-medium">Completed</h3>
+        <p class="text-3xl font-bold text-green-600 mt-2">0</p>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-6">
+      <h3 class="text-xl font-bold mb-4">Tính năng đang phát triển...</h3>
+      <p class="text-gray-600">Các tính năng employee sẽ được triển khai theo roadmap.</p>
+      <ul class="mt-4 space-y-2 text-gray-700">
+        <li>✅ Authentication hoàn tất</li>
+        <li>⏳ View My Tasks</li>
+        <li>⏳ Update Checklist</li>
+        <li>⏳ Upload Evidence</li>
+        <li>⏳ Submit for Review</li>
+      </ul>
+    </div>
+  </div>
+
+  <script>
+    const token = localStorage.getItem('token');
+    const employee = JSON.parse(localStorage.getItem('employee') || '{}');
+
+    if (!token) {
+      window.location.href = '/login.html';
+    }
+
+    if (employee.role !== 'employee') {
+      alert('Bạn không có quyền truy cập trang này');
+      window.location.href = '/login.html';
+    }
+
+    document.getElementById('userName').textContent = employee.fullName || 'Employee';
+
+    function logout() {
+      localStorage.removeItem('token');
+      localStorage.removeItem('employee');
+      window.location.href = '/login.html';
+    }
+  </script>
+</body>
+</html>

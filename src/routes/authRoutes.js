@@ -1,17 +1,37 @@
+/**
+ * Authentication Routes
+ * 
+ * /api/auth/*
+ */
+
 const express = require('express');
 const router = express.Router();
 const {
-  register,
   login,
   logout,
   getMe
 } = require('../controllers/authController');
-const { protect } = require('../middlewares/authMiddleware');
-const { validateRegister, validateLogin } = require('../validators/userValidator');
+const { authenticate } = require('../middlewares/authMiddleware');
 
-router.post('/register', validateRegister, register);
-router.post('/login', validateLogin, login);
-router.post('/logout', protect, logout);
-router.get('/me', protect, getMe);
+/**
+ * @route   POST /api/auth/login
+ * @desc    Login với phone + password
+ * @access  Public
+ */
+router.post('/login', login);
+
+/**
+ * @route   POST /api/auth/logout
+ * @desc    Logout (client xóa token)
+ * @access  Private
+ */
+router.post('/logout', authenticate, logout);
+
+/**
+ * @route   GET /api/auth/me
+ * @desc    Get thông tin user hiện tại
+ * @access  Private
+ */
+router.get('/me', authenticate, getMe);
 
 module.exports = router;

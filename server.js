@@ -37,12 +37,19 @@ app.set('views', path.join(__dirname, 'src/views'));
 // Routes
 app.use('/api', routes);
 
-// Home route
+// Home route - Redirect to login
 app.get('/', (req, res) => {
+  res.redirect('/login.html');
+});
+
+// API Health check
+app.get('/api/health', (req, res) => {
   res.json({
-    message: 'Welcome to ProManage API',
+    success: true,
+    message: 'ProManage API is running',
     version: '1.0.0',
-    status: 'running'
+    status: 'healthy',
+    timestamp: new Date().toISOString()
   });
 });
 
