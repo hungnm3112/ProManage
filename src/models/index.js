@@ -8,9 +8,13 @@
 const Employee = require('./Employee');
 const GroupUser = require('./GroupUser');
 const Brand = require('./Brand');
+const Broadcast = require('./Broadcast');
+const StoreTask = require('./StoreTask');
 
 module.exports = {
   Employee,
   GroupUser,
-  Brand
+  Brand,
+  Broadcast,
+  StoreTask
 };
