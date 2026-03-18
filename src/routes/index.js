@@ -14,6 +14,7 @@ const uploadRoutes = require('./uploadRoutes');
 const userRoutes = require('./userRoutes');
 const projectRoutes = require('./projectRoutes');
 const taskRoutes = require('./taskRoutes');
+const devRoutes = require('./devRoutes');
 
 // Mount routes
 router.use('/auth', authRoutes);
@@ -29,5 +30,8 @@ router.use('/upload', uploadRoutes);
 router.use('/users', userRoutes);
 router.use('/projects', projectRoutes);
 router.use('/tasks', taskRoutes);
+
+// Development tools (only in dev environment)
+router.use('/dev', devRoutes);
 
 module.exports = router;

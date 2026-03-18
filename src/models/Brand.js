@@ -1,6 +1,10 @@
 /**
  * Brand Model
- * Collection: Brand (existing in database)
+ * Collection: Branch (existing in database)
+ * 
+ * Lưu ý: Model name là 'Brand' nhưng collection name là 'Branch'
+ * - Model name 'Brand' được dùng trong code (mongoose.model, require, ref)
+ * - Collection name 'Branch' là tên thực tế trong MongoDB database
  * 
  * Chứa thông tin chi nhánh/cửa hàng
  */
@@ -45,7 +49,7 @@ const brandSchema = new mongoose.Schema({
   PercentPayment: String
 }, {
   timestamps: false,
-  collection: 'Brand'
+  collection: 'Branch'  // MongoDB collection name
 });
 
 // Indexes
@@ -93,6 +97,6 @@ brandSchema.methods.getManager = async function() {
   return null;
 };
 
-const Brand = mongoose.model('Brand', brandSchema);
+const Brand = mongoose.model('Brand', brandSchema);  // Model: 'Brand', Collection: 'Branch'
 
 module.exports = Brand;

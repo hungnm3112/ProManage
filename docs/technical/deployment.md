@@ -40,7 +40,7 @@ npm run dev
 
 **Nodemon** sẽ tự động restart server khi phát hiện thay đổi trong:
 - File `.js`, `.json`
-- Thư mục `routes/`, `controllers/`, `models/`, `middleware/`, `config/`, `services/`, `utils/`, `helpers/`
+- Thư mục `routes/`, `controllers/`, `models/`, `middlewares/`, `config/`, `services/`, `utils/`, `helpers/`
 
 **Cấu hình Nodemon** (`nodemon.json`):
 

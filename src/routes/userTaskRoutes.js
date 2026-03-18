@@ -21,7 +21,7 @@ const { authenticate, authorize } = require('../middlewares/authMiddleware');
 router.get(
   '/',
   authenticate,
-  authorize(['employee']),
+  authorize('employee'),
   userTaskValidator.validateGetMyTasks,
   userTaskController.getMyTasks
 );
@@ -34,7 +34,7 @@ router.get(
 router.get(
   '/:id',
   authenticate,
-  authorize(['employee']),
+  authorize('employee'),
   userTaskValidator.validateGetTaskById,
   userTaskController.getTaskById
 );
@@ -47,7 +47,7 @@ router.get(
 router.put(
   '/:id/checklist',
   authenticate,
-  authorize(['employee']),
+  authorize('employee'),
   userTaskValidator.validateUpdateChecklist,
   userTaskController.updateChecklist
 );
@@ -60,7 +60,7 @@ router.put(
 router.post(
   '/:id/evidence',
   authenticate,
-  authorize(['employee']),
+  authorize('employee'),
   userTaskValidator.validateUploadEvidence,
   userTaskController.uploadEvidence
 );
@@ -73,7 +73,7 @@ router.post(
 router.post(
   '/:id/submit',
   authenticate,
-  authorize(['employee']),
+  authorize('employee'),
   userTaskValidator.validateSubmitTask,
   userTaskController.submitTask
 );

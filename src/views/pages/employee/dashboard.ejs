@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Employee Dashboard - ProManage</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/css/dashboard.css">
+</head>
+<body class="bg-gray-100">
+  <nav class="bg-white shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between h-16">
+        <div class="flex items-center">
+          <h1 class="text-xl font-bold text-purple-600">ProManage</h1>
+          <span class="ml-4 px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-semibold">Employee</span>
+        </div>
+        <div class="flex items-center">
+          <div class="mr-4 text-right">
+            <p id="userName" class="text-gray-900 font-semibold"></p>
+            <p id="userPosition" class="text-sm text-gray-600"></p>
+          </div>
+          <a href="/user-guide" target="_blank" class="mr-2 bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded inline-flex items-center">
+            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
+            </svg>
+            Hướng dẫn
+          </a>
+          <button id="logoutBtn" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded">
+            Đăng xuất
+          </button>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <div id="loading" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 text-center">
+    <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+    <p class="mt-4 text-gray-600">Đang tải dữ liệu...</p>
+  </div>
+
+  <div id="dashboard" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 hidden">
+    <h2 class="text-3xl font-bold text-gray-900 mb-6">Dashboard Nhân Viên</h2>
+    
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div class="bg-white p-6 rounded-lg shadow">
+        <h3 class="text-gray-500 text-sm font-medium">Công việc của Tôi</h3>
+        <p id="myTasks" class="text-3xl font-bold text-blue-600 mt-2">0</p>
+      </div>
+      <div class="bg-white p-6 rounded-lg shadow">
+        <h3 class="text-gray-500 text-sm font-medium">Công việc Hoàn thành</h3>
+        <p id="completedTasks" class="text-3xl font-bold text-green-600 mt-2">0</p>
+      </div>
+      <div class="bg-white p-6 rounded-lg shadow">
+        <h3 class="text-gray-500 text-sm font-medium">Công việc Chờ xử lý</h3>
+        <p id="pendingTasks" class="text-3xl font-bold text-orange-600 mt-2">0</p>
+      </div>
+      <div class="bg-white p-6 rounded-lg shadow">
+        <h3 class="text-gray-500 text-sm font-medium">Điểm Trung bình</h3>
+        <p id="averageRating" class="text-3xl font-bold text-purple-600 mt-2">0.0</p>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-6">
+      <h3 class="text-xl font-bold mb-4">Tính năng đang phát triển...</h3>
+      <p class="text-gray-600">Các tính năng employee sẽ được triển khai theo roadmap.</p>
+      <ul class="mt-4 space-y-2 text-gray-700">
+        <li>✅ Authentication hoàn tất</li>
+        <li>⏳ Xem Công việc của Tôi</li>
+        <li>⏳ Upload Chứng minh (Hình ảnh/Video)</li>
+        <li>⏳ Xem Đánh giá</li>
+      </ul>
+    </div>
+  </div>
+
+  <script src="/js/employee-dashboard.js"></script>
+  <script src="/js/account-switcher.js"></script>
+</body>
+</html>

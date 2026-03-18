@@ -52,7 +52,7 @@
     - Schema cho GroupUser collection
     - Method: isAdmin(), isManager(), getRole()
   - File: `src/models/Brand.js`
-    - Schema cho Brand collection
+    - Schema cho Branch collection
     - Virtual: manager (populate từ Employee)
   - File: `src/models/index.js` - **BONUS:** Preload all models
   - Dependencies: None
@@ -926,7 +926,7 @@
 - Success responses: `{ success: true, data: {...} }`
 
 ### Database Conventions
-- Collection names: PascalCase (Employee, Brand)
+- Collection names: PascalCase (Employee, Branch)
 - Field names: snake_case cho existing, camelCase cho new
 - Always populate references khi return API
 - **Status field:** 'Đang hoạt động' (NOT 'Đang làm việc')

@@ -20,8 +20,20 @@ const { authenticate, authorize } = require('../middlewares/authMiddleware');
 router.get(
   '/admin',
   authenticate,
-  authorize(['admin']),
+  authorize('admin'),
   dashboardController.getAdminDashboard
+);
+
+/**
+ * @route   GET /api/dashboard/admin/tasks/:status
+ * @desc    Get admin tasks by status (completed, overdue, in-progress, pending-confirm)
+ * @access  Private (admin only)
+ */
+router.get(
+  '/admin/tasks/:status',
+  authenticate,
+  authorize('admin'),
+  dashboardController.getAdminTasksByStatus
 );
 
 /**
@@ -32,7 +44,7 @@ router.get(
 router.get(
   '/manager',
   authenticate,
-  authorize(['manager']),
+  authorize('manager'),
   dashboardController.getManagerDashboard
 );
 
@@ -44,7 +56,7 @@ router.get(
 router.get(
   '/employee',
   authenticate,
-  authorize(['employee']),
+  authorize('employee'),
   dashboardController.getEmployeeDashboard
 );
 

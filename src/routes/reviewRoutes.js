@@ -21,7 +21,7 @@ const { authenticate, authorize } = require('../middlewares/authMiddleware');
 router.get(
   '/pending',
   authenticate,
-  authorize(['manager']),
+  authorize('manager'),
   reviewValidator.validateGetPendingReviews,
   reviewController.getPendingReviews
 );
@@ -34,7 +34,7 @@ router.get(
 router.post(
   '/:taskId/approve',
   authenticate,
-  authorize(['manager']),
+  authorize('manager'),
   reviewValidator.validateApproveTask,
   reviewController.approveTask
 );
@@ -47,7 +47,7 @@ router.post(
 router.post(
   '/:taskId/reject',
   authenticate,
-  authorize(['manager']),
+  authorize('manager'),
   reviewValidator.validateRejectTask,
   reviewController.rejectTask
 );

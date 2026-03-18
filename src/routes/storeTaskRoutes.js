@@ -22,7 +22,7 @@ const { authenticate, authorize } = require('../middlewares/authMiddleware');
 router.get(
   '/',
   authenticate,
-  authorize(['admin', 'manager']),
+  authorize('admin', 'manager'),
   storeTaskValidator.validateGetStoreTasks,
   storeTaskController.getStoreTasks
 );
@@ -36,7 +36,7 @@ router.get(
 router.get(
   '/:id',
   authenticate,
-  authorize(['admin', 'manager']),
+  authorize('admin', 'manager'),
   storeTaskValidator.validateGetStoreTaskById,
   storeTaskController.getStoreTaskById
 );
@@ -50,7 +50,7 @@ router.get(
 router.put(
   '/:id/accept',
   authenticate,
-  authorize(['manager']),
+  authorize('manager'),
   storeTaskValidator.validateAcceptStoreTask,
   storeTaskController.acceptStoreTask
 );
@@ -64,7 +64,7 @@ router.put(
 router.put(
   '/:id/reject',
   authenticate,
-  authorize(['manager']),
+  authorize('manager'),
   storeTaskValidator.validateRejectStoreTask,
   storeTaskController.rejectStoreTask
 );
@@ -78,7 +78,7 @@ router.put(
 router.post(
   '/:id/assign',
   authenticate,
-  authorize(['manager']),
+  authorize('manager'),
   storeTaskValidator.validateAssignEmployees,
   storeTaskController.assignEmployees
 );

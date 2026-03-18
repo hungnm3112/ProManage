@@ -51,18 +51,42 @@ npm start
 ```
 ProManage/
 ├── src/
-│   ├── config/          # Cấu hình
-│   ├── models/          # Database models
-│   ├── views/           # View templates
-│   ├── controllers/     # Request handlers
-│   ├── routes/          # API routes
-│   ├── middlewares/     # Middleware functions
-│   ├── services/        # Business logic
+│   ├── config/          # Cấu hình (database, multer, etc.)
+│   ├── models/          # Mongoose models (Employee, Broadcast, StoreTask, UserTask, Notification)
+│   ├── views/           # View templates (MVC Views)
+│   │   ├── pages/       # EJS templates (NO inline CSS/JS)
+│   │   │   ├── login.ejs
+│   │   │   ├── admin/
+│   │   │   │   └── dashboard.ejs
+│   │   │   ├── manager/
+│   │   │   │   └── dashboard.ejs
+│   │   │   └── employee/
+│   │   │       └── dashboard.ejs
+│   │   ├── layouts/     # EJS layouts (future)
+│   │   ├── partials/    # Reusable components (future)
+│   │   └── errors/      # Error pages (future)
+│   ├── controllers/     # Request handlers (Business logic)
+│   ├── routes/          # Express routes (API endpoints)
+│   ├── middlewares/     # Middleware functions (auth, validation, error handling)
+│   ├── services/        # Business services (notification, file upload)
+│   ├── helpers/         # Helper functions (auth, progress calculations)
+│   ├── jobs/            # Cron jobs (recurring broadcasts)
 │   ├── utils/           # Utility functions
-│   └── validators/      # Input validation
-├── public/              # Static files
+│   └── validators/      # Input validation schemas
+├── public/              # Static assets ONLY (CSS, JS, Images)
+│   ├── css/             # Stylesheets (separated from HTML)
+│   │   ├── login.css         # Login page styles
+│   │   └── dashboard.css     # Dashboard common styles
+│   ├── js/              # Client-side JavaScript (separated from HTML)
+│   │   ├── login.js          # Login logic
+│   │   ├── admin-dashboard.js    # Admin dashboard
+│   │   ├── manager-dashboard.js  # Manager dashboard
+│   │   └── employee-dashboard.js # Employee dashboard
+│   └── images/          # Static images
+├── uploads/             # User uploaded files (photos, videos, documents)
+├── docs/                # Documentation
 ├── tests/               # Test files
-└── logs/                # Log files
+└── logs/                # Application logs
 ```
 
 ## 🔧 Scripts
@@ -76,7 +100,7 @@ ProManage/
 
 Server sẽ tự động restart khi:
 - File `.js` hoặc `.json` thay đổi
-- Các thư mục: `routes/`, `controllers/`, `models/`, `middleware/`, `config/`, `services/`
+- Các thư mục: `routes/`, `controllers/`, `models/`, `middlewares/`, `config/`, `services/`
 
 Để restart thủ công, gõ `rs` trong terminal đang chạy nodemon.
 

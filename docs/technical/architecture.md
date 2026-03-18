@@ -65,7 +65,7 @@ Node.js v18+
 MongoDB v6.0+
 ├── Collections (7):
 │   ├── Employee (HIỆN TẠI - users)
-│   ├── Brand (HIỆN TẠI - stores)
+│   ├── Branch (HIỆN TẠI - stores, model: Brand)
 │   ├── GroupUser (HIỆN TẠI - chức vụ)
 │   ├── broadcasts (SẼ PHÁT TRIỂN)
 │   ├── store_tasks (SẼ PHÁT TRIỂN)
@@ -291,73 +291,179 @@ Controller
 
 ## 📁 Folder Structure
 
+**MVC Architecture** - Model-View-Controller pattern with clear separation of concerns.
+
 ```
 ProManage/
-├── src/
-│   ├── config/
-│   │   ├── database.js        # MongoDB connection
-│   │   ├── multer.js           # File upload config
-│   │   └── environment.js      # Env variables
+├── src/                        # Source code (MVC)
+│   ├── config/                 # Configuration
+│   │   ├── database.js         # MongoDB connection
+│   │   └── multer.js           # File upload config (10MB images, 50MB videos)
 │   │
-│   ├── models/                 # Mongoose models
-│   │   ├── User.js
-│   │   ├── Store.js
-│   │   ├── Broadcast.js
-│   │   ├── StoreTask.js
-│   │   ├── UserTask.js
-│   │   └── Notification.js
+│   ├── models/                 # Models - Database schemas (Mongoose)
+│   │   ├── index.js            # Model registry (preload to prevent schema errors)
+│   │   ├── Employee.js         # Employee model (existing DB collection)
+│   │   ├── GroupUser.js        # User roles (admin/manager/employee)
+│   │   ├── Brand.js            # Store/Branch model
+│   │   ├── Broadcast.js        # Broadcast with recurring support
+│   │   ├── StoreTask.js        # Tasks assigned to stores
+│   │   ├── UserTask.js         # Tasks assigned to employees
+│   │   └── Notification.js     # User notifications
 │   │
-│   ├── controllers/            # Business logic
-│   │   ├── authController.js
-│   │   ├── broadcastController.js
-│   │   ├── storeTaskController.js
-│   │   ├── userTaskController.js
-│   │   ├── reviewController.js
-│   │   └── notificationController.js
+│   ├── views/                  # Views - EJS templates (MVC Views)
+│   │   ├── pages/              # ✅ EJS templates (NO inline CSS/JS)
+│   │   │   ├── login.ejs       # Login page → links /css/login.css, /js/login.js
+│   │   │   ├── admin/
+│   │   │   │   └── dashboard.ejs     # Admin dashboard → links /js/admin-dashboard.js
+│   │   │   ├── manager/
+│   │   │   │   └── dashboard.ejs     # Manager dashboard → links /js/manager-dashboard.js
+│   │   │   └── employee/
+│   │   │       └── dashboard.ejs     # Employee dashboard → links /js/employee-dashboard.js
+│   │   ├── layouts/            # EJS layouts (future - master templates)
+│   │   ├── partials/           # Reusable components (future - header, footer, nav)
+│   │   └── errors/             # Error pages (future - 404, 500, etc.)
 │   │
-│   ├── routes/                 # Express routes
-│   │   ├── auth.js
-│   │   ├── broadcasts.js
-│   │   ├── storeTasks.js
-│   │   ├── userTasks.js
-│   │   └── notifications.js
+│   ├── controllers/            # Controllers - Business logic
+│   │   ├── authController.js           # Login, logout, getMe
+│   │   ├── employeeController.js       # Employee CRUD
+│   │   ├── brandController.js          # Brand/Store CRUD
+│   │   ├── broadcastController.js      # Create, publish broadcasts
+│   │   ├── storeTaskController.js      # Accept, reject, assign employees
+│   │   ├── userTaskController.js       # Employee task execution
+│   │   ├── reviewController.js         # Manager approve/reject tasks
+│   │   ├── dashboardController.js      # Analytics for all roles
+│   │   ├── notificationController.js   # View and manage notifications
+│   │   └── uploadController.js         # File upload endpoints
 │   │
-│   ├── middleware/             # Express middleware
-│   │   ├── auth.js             # JWT verification
-│   │   ├── authorize.js        # Role-based access
-│   │   ├── upload.js           # Multer config
+│   ├── routes/                 # Express routes - API endpoints
+│   │   ├── index.js            # Route registry (mounts all routes)
+│   │   ├── authRoutes.js       # POST /api/auth/login
+│   │   ├── employeeRoutes.js   # /api/employees/*
+│   │   ├── brandRoutes.js      # /api/brands/*
+│   │   ├── broadcastRoutes.js  # /api/broadcasts/*
+│   │   ├── storeTaskRoutes.js  # /api/store-tasks/*
+│   │   ├── userTaskRoutes.js   # /api/my-tasks/*
+│   │   ├── reviewRoutes.js     # /api/reviews/*
+│   │   ├── dashboardRoutes.js  # /api/dashboard/*
+│   │   ├── notificationRoutes.js # /api/notifications/*
+│   │   └── uploadRoutes.js     # /api/upload/*
+│   │
+│   ├── middlewares/            # Express middleware
+│   │   ├── authMiddleware.js   # authenticate(), authorize(roles)
 │   │   ├── errorHandler.js     # Global error handler
-│   │   └── validate.js         # Input validation
+│   │   └── logger.js           # Request logging
 │   │
-│   ├── services/               # Business services
-│   │   ├── broadcastService.js
-│   │   ├── notificationService.js
-│   │   └── fileService.js
+│   ├── services/               # Business services (reusable logic)
+│   │   ├── notificationService.js  # Create, send notifications
+│   │   └── jwtService.js           # Generate, verify JWT tokens
 │   │
-│   ├── utils/                  # Utilities
-│   │   ├── helpers.js
-│   │   └── constants.js
+│   ├── helpers/                # Helper functions
+│   │   ├── authHelper.js       # Password hashing (HMAC-SHA512), role checking
+│   │   ├── progressHelper.js   # Calculate task completion rates
+│   │   └── responseHandler.js  # sendSuccess(), sendError()
 │   │
-│   └── jobs/                   # Cron jobs
-│       └── recurringTasks.js
+│   ├── validators/             # Input validation (express-validator)
+│   │   ├── broadcastValidator.js
+│   │   ├── userTaskValidator.js
+│   │   └── reviewValidator.js
+│   │
+│   ├── jobs/                   # Cron jobs
+│   │   ├── recurringBroadcasts.js  # Daily cron at 00:00 (Asia/Ho_Chi_Minh)
+│   │   └── testRecurring.js        # Manual testing script
+│   │
+│   └── utils/                  # Utilities
+│       └── responseHandler.js  # Standard API responses
 │
-├── uploads/                    # Uploaded files
-│   ├── photos/
-│   ├── videos/
-│   └── documents/
+├── public/                     # ✅ Static assets ONLY (NOT views)
+│   ├── css/                    # Stylesheets (separated from templates)
+│   │   ├── login.css           # Login page styles (.gradient-bg)
+│   │   └── dashboard.css       # Dashboard common styles
+│   ├── js/                     # Client-side JavaScript (separated from templates)
+│   │   ├── login.js            # Login form logic, authentication
+│   │   ├── admin-dashboard.js  # Admin dashboard data loading, rendering
+│   │   ├── manager-dashboard.js    # Manager dashboard logic
+│   │   └── employee-dashboard.js   # Employee dashboard logic
+│   └── images/                 # Static images (logos, icons)
+│
+├── uploads/                    # User uploaded files (served as static)
+│   ├── photos/                 # Evidence photos (max 10MB)
+│   ├── videos/                 # Evidence videos (max 50MB)
+│   └── documents/              # PDF, Word, Excel files
 │
 ├── docs/                       # Documentation
-│   ├── admin/
-│   ├── manager/
-│   ├── employee/
-│   └── technical/
+│   ├── TODO.md                 # Development roadmap (46/46 tasks - 100%)
+│   ├── TESTING_GUIDE.md        # Complete testing guide
+│   ├── QUICK_REFERENCE.md      # Quick API reference
+│   ├── admin/                  # Admin documentation
+│   ├── manager/                # Manager documentation
+│   ├── employee/               # Employee documentation
+│   └── technical/              # Technical documentation
+│       ├── architecture.md     # This file
+│       ├── database-schema.md  # Database design
+│       ├── business-logic.md   # Business rules
+│       ├── security.md         # Security practices
+│       └── deployment.md       # Deployment guide
 │
-├── .env                        # Environment variables
-├── .gitignore
-├── package.json
-├── server.js                   # Entry point
-└── README.md
+├── .env                        # Environment variables (PORT=5000, JWT secret, MongoDB URI)
+├── .gitignore                  # Git ignore patterns
+├── package.json                # Dependencies and scripts
+├── nodemon.json                # Nodemon configuration (auto-restart)
+├── server.js                   # ✅ Entry point (Express app, routes mounting)
+└── README.md                   # Project overview
 ```
+
+### 🎯 Key Architectural Decisions:
+
+**1. MVC Separation:**
+- ✅ **Models** in `src/models/` - Database schemas only
+- ✅ **Views** in `src/views/pages/` - HTML templates (NOT in public/)
+- ✅ **Controllers** in `src/controllers/` - Business logic
+
+**2. Static vs Dynamic:**
+- ✅ `public/` - CSS, JS, Images (static assets)
+- ✅ `src/views/pages/` - HTML pages (served via routes)
+- ✅ `uploads/` - User-generated content
+
+**3. Routes Structure:**
+- All API routes under `/api/*`
+- HTML pages served via direct routes (`/login`, `/admin/dashboard`)
+- No `.html` extension in URLs
+
+**4. Authentication Flow:**
+- HMAC-SHA512 password hashing (NOT simple SHA512)
+- JWT tokens with role information
+- Middleware-based authorization by role
+
+**5. View Layer Architecture (EJS + Separated Assets):**
+- ✅ **EJS Templates** in `src/views/pages/` - Server-rendered HTML
+- ✅ **CSS Separation** - All styles in `public/css/` (NO inline `<style>`)
+- ✅ **JS Separation** - All client logic in `public/js/` (NO inline `<script>`)
+- ✅ **MVC Compliance** - Clean separation of concerns:
+  - **Models**: `src/models/` - Data schemas
+  - **Views**: `src/views/pages/` - EJS templates (presentation only)
+  - **Controllers**: `src/controllers/` - Business logic
+
+**Benefits of Separation:**
+```
+Before (❌ Anti-pattern):
+login.html
+  ├── <style>.gradient-bg { ... }</style>     # ❌ Inline CSS
+  └── <script>loginForm.submit(...)</script>   # ❌ Inline JS
+
+After (✅ Proper MVC):
+login.ejs
+  ├── <link rel="stylesheet" href="/css/login.css">    # ✅ Separated CSS
+  └── <script src="/js/login.js"></script>              # ✅ Separated JS
+
+public/css/login.css          # ✅ Reusable, cacheable
+public/js/login.js            # ✅ Testable, maintainable
+```
+
+**Implementation:**
+- Server.js: `app.set('view engine', 'ejs')`
+- Routes: `res.render('admin/dashboard')` (NOT `res.sendFile(...)`)
+- Static middleware: Serves `/css/`, `/js/`, `/images/` from `public/`
+- Browser caching: CSS/JS cached by CDN, templates rendered fresh
 
 ---
 

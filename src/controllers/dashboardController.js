@@ -41,18 +41,26 @@ const getAdminDashboard = async (req, res) => {
       updatedAt: { $gte: startOfMonth, $lte: endOfMonth }
     });
     
-    // Overdue tasks
-    const overdueTasks = await StoreTask.countDocuments({
-      status: { $in: ['pending', 'accepted', 'in_progress'] },
-      deadline: { $lt: now }
-    });
+    // NEW: Stats for KPI cards - based on StoreTask status
+    const completedTasks = await StoreTask.countDocuments({ status: 'completed' });
+    const inProgressTasks = await StoreTask.countDocuments({ status: 'in_progress' });
+    const pendingConfirmTasks = await StoreTask.countDocuments({ status: 'pending' });
+    
+    // Overdue tasks: Find all non-completed StoreTasks and check broadcast deadline
+    const overdueStoreTasksRaw = await StoreTask.find({
+      status: { $in: ['pending', 'accepted', 'in_progress'] }
+    }).populate('broadcastId', 'deadline');
+    
+    const overdueTasks = overdueStoreTasksRaw.filter(task => {
+      return task.broadcastId && task.broadcastId.deadline && task.broadcastId.deadline < now;
+    }).length;
     
     // Pending reviews (submitted user tasks)
     const pendingReviews = await UserTask.countDocuments({
       status: 'submitted'
     });
     
-    // Total stores (brands)
+    // Total stores (branches)
     const totalStores = await Brand.countDocuments();
     
     // Total employees
@@ -83,7 +91,7 @@ const getAdminDashboard = async (req, res) => {
       },
       {
         $lookup: {
-          from: 'brands',
+          from: 'Branch',  // MongoDB collection name
           localField: '_id',
           foreignField: '_id',
           as: 'store'
@@ -166,7 +174,12 @@ const getAdminDashboard = async (req, res) => {
         totalBroadcasts,
         activeBroadcasts,
         completedThisMonth,
+        // KPI Cards data
+        completedTasks,
         overdueTasks,
+        inProgressTasks,
+        pendingConfirmTasks,
+        // Legacy fields
         pendingReviews,
         totalStores,
         totalEmployees
@@ -180,6 +193,105 @@ const getAdminDashboard = async (req, res) => {
     return sendSuccess(res, 'Admin dashboard data fetched successfully', dashboardData);
   } catch (error) {
     console.error('getAdminDashboard error:', error);
+    return sendError(res, error.message, 500);
+  }
+};
+
+/**
+ * @route   GET /api/dashboard/admin/tasks/:status
+ * @desc    Get admin tasks by status
+ * @access  Private (admin only)
+ */
+const getAdminTasksByStatus = async (req, res) => {
+  try {
+    const { status } = req.params;
+    const now = new Date();
+    
+    let query = {};
+    let tasks = [];
+    
+    switch (status) {
+      case 'completed':
+        // Completed tasks
+        query = { status: 'completed' };
+        tasks = await StoreTask.find(query)
+          .populate('broadcastId', 'title description priority deadline')
+          .populate('storeId', 'Name Map_Address')
+          .populate('managerId', 'FullName')
+          .sort({ completedAt: -1 })
+          .limit(50);
+        break;
+        
+      case 'overdue':
+        // Overdue tasks: not completed and past deadline
+        const overdueStoreTasks = await StoreTask.find({
+          status: { $in: ['pending', 'accepted', 'in_progress'] }
+        })
+          .populate('broadcastId', 'title description priority deadline')
+          .populate('storeId', 'Name Map_Address')
+          .populate('managerId', 'FullName')
+          .sort({ createdAt: -1 })
+          .limit(100);
+        
+        // Filter by deadline
+        tasks = overdueStoreTasks.filter(task => {
+          return task.broadcastId && task.broadcastId.deadline < now;
+        });
+        break;
+        
+      case 'in-progress':
+        // In-progress tasks
+        query = { status: 'in_progress' };
+        tasks = await StoreTask.find(query)
+          .populate('broadcastId', 'title description priority deadline')
+          .populate('storeId', 'Name Map_Address')
+          .populate('managerId', 'FullName')
+          .sort({ startedAt: -1 })
+          .limit(50);
+        break;
+        
+      case 'pending-confirm':
+        // Pending confirmation tasks
+        query = { status: 'pending' };
+        tasks = await StoreTask.find(query)
+          .populate('broadcastId', 'title description priority deadline')
+          .populate('storeId', 'Name Map_Address')
+          .populate('managerId', 'FullName')
+          .sort({ createdAt: -1 })
+          .limit(50);
+        break;
+        
+      default:
+        return sendError(res, 'Invalid status. Must be one of: completed, overdue, in-progress, pending-confirm', 400);
+    }
+    
+    // Format response data
+    const formattedTasks = tasks.map(task => {
+      const broadcast = task.broadcastId || {};
+      const store = task.storeId || {};
+      const manager = task.managerId || {};
+      
+      return {
+        _id: task._id,
+        broadcastTitle: broadcast.title || 'N/A',
+        broadcastDescription: broadcast.description || '',
+        storeName: store.Name || 'N/A',
+        storeAddress: store.Map_Address || '',
+        managerName: manager.FullName || 'N/A',
+        deadline: broadcast.deadline,
+        status: task.status,
+        priority: broadcast.priority || 'medium',
+        completionPercent: task.completionRate || 0,
+        createdAt: task.createdAt,
+        completedAt: task.completedAt,
+        startedAt: task.startedAt,
+        acceptedAt: task.acceptedAt
+      };
+    });
+    
+    return sendSuccess(res, `Tasks with status '${status}' fetched successfully`, formattedTasks);
+  } catch (error) {
+    console.error('getAdminTasksByStatus error:', error);
     return sendError(res, error.message, 500);
   }
 };
@@ -406,6 +518,7 @@ const getEmployeeDashboard = async (req, res) => {
 
 module.exports = {
   getAdminDashboard,
+  getAdminTasksByStatus,
   getManagerDashboard,
   getEmployeeDashboard
 };

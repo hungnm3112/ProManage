@@ -2,7 +2,8 @@
   "watch": [
     "server.js",
     "app.js",
-    "src/**/*.js"
+    "src/**/*.js",
+    "public/js/**/*.js"
   ],
   "ignore": [
     "node_modules/**",
@@ -13,7 +14,9 @@
     "*.test.js",
     "*.spec.js",
     "docs/**",
-    "public/**",
+    "public/css/**",
+    "public/images/**",
+    "public/lib/**",
     ".git/**",
     "coverage/**"
   ],

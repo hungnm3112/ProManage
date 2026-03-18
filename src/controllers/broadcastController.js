@@ -21,6 +21,9 @@ const notificationService = require('../services/notificationService');
  */
 const createBroadcast = async (req, res) => {
   try {
+    console.log('[createBroadcast] Request body:', JSON.stringify(req.body, null, 2));
+    console.log('[createBroadcast] User ID:', req.user?._id);
+    
     const {
       title,
       description,
@@ -46,7 +49,11 @@ const createBroadcast = async (req, res) => {
       createdBy: req.user._id
     });
     
+    console.log('[createBroadcast] Broadcast object before save:', JSON.stringify(broadcast, null, 2));
+    
     await broadcast.save();
+    
+    console.log('[createBroadcast] Broadcast saved successfully! ID:', broadcast._id);
     
     // Populate creator and stores
     await broadcast.populate([
@@ -54,6 +61,7 @@ const createBroadcast = async (req, res) => {
       { path: 'assignedStores', select: 'Name Map_Address Phone' }
     ]);
     
+    console.log('[createBroadcast] Returning success response');
     return sendSuccess(res, 'Broadcast created successfully', { broadcast }, 201);
   } catch (error) {
     console.error('createBroadcast error:', error);
@@ -387,11 +395,576 @@ const publishBroadcast = async (req, res) => {
   }
 };
 
+/**
+ * @route   POST /api/broadcasts/:id/assign
+ * @desc    Assign broadcast to stores with specific employees or individual employees
+ * @access  Private (admin only)
+ * @body    { storeAssignments: [{ storeId, employeeIds }] } OR { employeeIds: [] }
+ */
+const assignBroadcast = async (req, res) => {
+  const UserTask = require('../models/UserTask');
+  
+  try {
+    const { id } = req.params;
+    const { storeAssignments, employeeIds } = req.body;
+    
+    console.log('[assignBroadcast] Broadcast ID:', id);
+    console.log('[assignBroadcast] Store Assignments:', storeAssignments);
+    console.log('[assignBroadcast] Employee IDs:', employeeIds);
+    
+    // 1. Get broadcast and verify it exists
+    const broadcast = await Broadcast.findById(id);
+    if (!broadcast) {
+      return sendError(res, 'Broadcast not found', 404);
+    }
+    
+    // Check if broadcast is in valid status (not archived)
+    if (broadcast.status === 'archived') {
+      return sendError(res, 'Cannot assign archived broadcasts', 400);
+    }
+    
+    const createdStoreTasks = [];
+    const createdUserTasks = [];
+    const errors = [];
+    
+    // 2. Handle assignment to STORES with specific employees
+    if (storeAssignments && storeAssignments.length > 0) {
+      console.log('[assignBroadcast] Processing store assignments...');
+      
+      for (const assignment of storeAssignments) {
+        const { storeId, employeeIds: empIds } = assignment;
+        
+        try {
+          // Find store
+          const store = await Brand.findById(storeId);
+          if (!store) {
+            errors.push(`Store ${storeId} not found`);
+            continue;
+          }
+          
+          console.log(`[assignBroadcast] Processing store ${store.Name} with ${empIds.length} employees`);
+          
+          // Find manager for StoreTask (needed for managerId field)
+          const allEmployees = await Employee.find({
+            ID_Branch: storeId,
+            Status: 'Đang hoạt động'
+          }).populate('ID_GroupUser');
+          
+          let manager = null;
+          for (const emp of allEmployees) {
+            const role = await getEmployeeRole(emp);
+            if (role === 'manager') {
+              manager = emp;
+              break;
+            }
+          }
+          
+          // If no manager, use first selected employee as fallback
+          if (!manager && empIds.length > 0) {
+            const firstEmp = await Employee.findById(empIds[0]);
+            if (firstEmp) {
+              console.log(`[assignBroadcast] No manager found for ${store.Name}, using first selected employee as fallback`);
+              manager = firstEmp;
+            }
+          }
+          
+          if (!manager) {
+            errors.push(`Cannot find manager or employee for store ${store.Name}`);
+            continue;
+          }
+          
+          // Check if StoreTask already exists
+          let storeTask = await StoreTask.findOne({
+            broadcastId: broadcast._id,
+            storeId: storeId
+          });
+          
+          // Create or update StoreTask
+          if (!storeTask) {
+            storeTask = new StoreTask({
+              broadcastId: broadcast._id,
+              storeId: storeId,
+              managerId: manager._id,
+              status: 'pending',
+              assignedEmployees: empIds
+            });
+            
+            await storeTask.save();
+            createdStoreTasks.push(storeTask);
+            console.log(`[assignBroadcast] Created StoreTask for ${store.Name}`);
+          } else {
+            // Check if StoreTask already has someone assigned
+            if (storeTask.assignedEmployees.length > 0) {
+              // Get current assigned employee
+              const currentEmployeeId = storeTask.assignedEmployees[0];
+              const currentEmployee = await Employee.findById(currentEmployeeId);
+              const currentName = currentEmployee?.FullName || 'N/A';
+              
+              // Check if trying to assign different person to same store
+              const isDifferentPerson = !empIds.some(id => id.toString() === currentEmployeeId.toString());
+              
+              if (isDifferentPerson) {
+                // Reject: already has someone, suggest editing
+                errors.push(`Chi nhánh "${store.Name}" đã được giao cho nhân viên ${currentName}. Vui lòng sửa task cũ để thay đổi người phụ trách.`);
+                continue;
+              } else {
+                // Same person, skip
+                console.log(`[assignBroadcast] StoreTask already assigned to same person for ${store.Name}`);
+                continue;
+              }
+            } else {
+              // No one assigned yet, proceed with assignment
+              storeTask.assignedEmployees = empIds;
+              await storeTask.save();
+              console.log(`[assignBroadcast] Updated StoreTask for ${store.Name}`);
+            }
+          }
+          
+          // Create UserTask for each selected employee
+          for (const employeeId of empIds) {
+            try {
+              // Find employee
+              const employee = await Employee.findById(employeeId).populate('ID_GroupUser');
+              if (!employee) {
+                errors.push(`Employee ${employeeId} not found`);
+                continue;
+              }
+              
+              if (employee.Status !== 'Đang hoạt động') {
+                errors.push(`Employee ${employee.FullName} is not active`);
+                continue;
+              }
+              
+              // Check if UserTask already exists
+              const existingUserTask = await UserTask.findOne({
+                broadcastId: broadcast._id,
+                employeeId: employeeId
+              });
+              
+              if (existingUserTask) {
+                console.log(`[assignBroadcast] UserTask already exists for employee ${employeeId}, skipping...`);
+                // Get the actual employee who is currently assigned
+                const assignedEmployee = await Employee.findById(existingUserTask.employeeId);
+                const assignedName = assignedEmployee?.FullName || 'N/A';
+                console.log(`[assignBroadcast] Assigned employee: ${assignedName} (ID: ${existingUserTask.employeeId})`);
+                errors.push(`Giao việc thất bại do công việc "${broadcast.title}" đã được giao cho nhân viên ${assignedName} phụ trách, vui lòng kiểm tra lại.`);
+                continue;
+              }
+              
+              // Create UserTask (Individual Task)
+              const userTask = new UserTask({
+                storeTaskId: storeTask._id,
+                broadcastId: broadcast._id,
+                employeeId: employeeId,
+                checklist: broadcast.checklist.map(item => ({
+                  task: item.task,
+                  note: item.note || '',
+                  required: item.required,
+                  isCompleted: false
+                })),
+                status: 'assigned',
+                evidences: []
+              });
+              
+              await userTask.save();
+              createdUserTasks.push(userTask);
+              console.log(`[assignBroadcast] Created UserTask for ${employee.FullName} at ${store.Name}`);
+              
+            } catch (error) {
+              console.error(`[assignBroadcast] Error processing employee ${employeeId}:`, error);
+              errors.push(`Error assigning to employee ${employeeId}: ${error.message}`);
+            }
+          }
+          
+        } catch (error) {
+          console.error(`[assignBroadcast] Error processing store ${storeId}:`, error);
+          errors.push(`Error assigning to store ${storeId}: ${error.message}`);
+        }
+      }
+    }
+    
+    // 3. Handle assignment to INDIVIDUAL EMPLOYEES
+    if (employeeIds && employeeIds.length > 0) {
+      console.log('[assignBroadcast] Processing individual employee assignments...');
+      
+      for (const employeeId of employeeIds) {
+        try {
+          // Find employee
+          const employee = await Employee.findById(employeeId).populate('ID_GroupUser');
+          if (!employee) {
+            errors.push(`Employee ${employeeId} not found`);
+            continue;
+          }
+          
+          if (employee.Status !== 'Đang hoạt động') {
+            errors.push(`Employee ${employee.FullName} is not active`);
+            continue;
+          }
+          
+          if (!employee.ID_Branch) {
+            errors.push(`Employee ${employee.FullName} has no assigned branch`);
+            continue;
+          }
+          
+          // Check if UserTask already exists
+          const existingIndividualTaskCheck = await UserTask.findOne({
+            broadcastId: broadcast._id,
+            employeeId: employeeId
+          });
+          
+          if (existingIndividualTaskCheck) {
+            console.log(`[assignBroadcast] UserTask already exists for employee ${employeeId}, skipping...`);
+            // Get the actual employee who is currently assigned
+            const assignedEmployee = await Employee.findById(existingIndividualTaskCheck.employeeId);
+            const assignedName = assignedEmployee?.FullName || 'N/A';
+            console.log(`[assignBroadcast] Assigned employee: ${assignedName} (ID: ${existingIndividualTaskCheck.employeeId})`);
+            errors.push(`Giao việc thất bại do công việc "${broadcast.title}" đã được giao cho nhân viên ${assignedName} phụ trách, vui lòng kiểm tra lại.`);
+            continue;
+          }
+          
+          // Find or create StoreTask for this employee's branch
+          let storeTask = await StoreTask.findOne({
+            broadcastId: broadcast._id,
+            storeId: employee.ID_Branch
+          });
+          
+          // Check if UserTask already exists for this employee
+          const existingIndividualTask = await UserTask.findOne({
+            broadcastId: broadcast._id,
+            employeeId: employeeId
+          });
+          
+          if (existingIndividualTask) {
+            console.log(`[assignBroadcast] UserTask already exists for employee ${employeeId}, skipping...`);
+            // Get the actual employee who is currently assigned
+            const assignedEmployee = await Employee.findById(existingIndividualTask.employeeId);
+            const assignedName = assignedEmployee?.FullName || 'N/A';
+            console.log(`[assignBroadcast] Assigned employee: ${assignedName} (ID: ${existingIndividualTask.employeeId})`);
+            errors.push(`Công việc "${broadcast.title}" cho nhân viên ${assignedName} đã tồn tại. Vui lòng sửa task cũ để thay đổi người phụ trách.`);
+            continue;
+          }
+          
+          if (!storeTask) {
+            // Find manager of this store
+            const managers = await Employee.find({
+              ID_Branch: employee.ID_Branch,
+              Status: 'Đang hoạt động'
+            }).populate('ID_GroupUser');
+            
+            let manager = null;
+            for (const emp of managers) {
+              const role = await getEmployeeRole(emp);
+              if (role === 'manager') {
+                manager = emp;
+                break;
+              }
+            }
+            
+            // Use current employee as fallback if no manager
+            if (!manager) {
+              console.log(`[assignBroadcast] No manager found, using employee ${employee.FullName} as fallback`);
+              manager = employee;
+            }
+            
+            // Create StoreTask
+            storeTask = new StoreTask({
+              broadcastId: broadcast._id,
+              storeId: employee.ID_Branch,
+              managerId: manager._id,
+              status: 'pending',
+              assignedEmployees: [employeeId]
+            });
+            
+            await storeTask.save();
+            createdStoreTasks.push(storeTask);
+            console.log(`[assignBroadcast] Created StoreTask for employee's branch`);
+          } else {
+            // Update assignedEmployees if not already included
+            if (!storeTask.assignedEmployees.includes(employeeId)) {
+              storeTask.assignedEmployees.push(employeeId);
+              await storeTask.save();
+            }
+          }
+          
+          // Create UserTask for employee (Individual Task)
+          const userTask = new UserTask({
+            storeTaskId: storeTask._id,
+            broadcastId: broadcast._id,
+            employeeId: employeeId,
+            checklist: broadcast.checklist.map(item => ({
+              task: item.task,
+              note: item.note || '',
+              required: item.required,
+              isCompleted: false
+            })),
+            status: 'assigned',
+            evidences: []
+          });
+          
+          await userTask.save();
+          createdUserTasks.push(userTask);
+          console.log(`[assignBroadcast] Created UserTask for ${employee.FullName}`);
+          
+        } catch (error) {
+          console.error(`[assignBroadcast] Error processing employee ${employeeId}:`, error);
+          errors.push(`Error assigning to employee ${employeeId}: ${error.message}`);
+        }
+      }
+    }
+    
+    // 4. Update broadcast status to 'active' if it was 'draft'
+    if (broadcast.status === 'draft' && createdUserTasks.length > 0) {
+      broadcast.status = 'active';
+      await broadcast.save();
+      console.log('[assignBroadcast] Broadcast status updated to active');
+    }
+    
+    // 5. Return response (success even with errors - errors are warnings)
+    const response = {
+      message: 'Assignment completed',
+      created: {
+        storeTasks: createdStoreTasks.length,
+        userTasks: createdUserTasks.length
+      },
+      details: {
+        storeTasks: createdStoreTasks.map(st => ({
+          id: st._id,
+          storeId: st.storeId,
+          managerId: st.managerId
+        })),
+        userTasks: createdUserTasks.map(ut => ({
+          id: ut._id,
+          employeeId: ut.employeeId
+        }))
+      }
+    };
+    
+    if (errors.length > 0) {
+      response.errors = errors;
+      response.message += ` with ${errors.length} warning(s)`;
+    }
+    
+    console.log('[assignBroadcast] Success:', response);
+    return sendSuccess(res, response.message, response, 200);
+    
+  } catch (error) {
+    console.error('[assignBroadcast] Error:', error);
+    return sendError(res, error.message, 500);
+  }
+};
+
+/**
+ * @desc    Update a UserTask (admin can edit all details and reassign)
+ * @route   PUT /api/broadcasts/user-tasks/:taskId
+ * @access  Private/Admin
+ */
+const updateUserTask = async (req, res) => {
+  try {
+    const { taskId } = req.params;
+    const updates = req.body;
+    
+    console.log(`[updateUserTask] Updating task ${taskId}:`, updates);
+    
+    // Find the UserTask
+    const UserTask = require('../models/UserTask');
+    const userTask = await UserTask.findById(taskId)
+      .populate('broadcastId')
+      .populate('employeeId');
+    
+    if (!userTask) {
+      return sendError(res, 'Task not found', 404);
+    }
+    
+    // Check if task is completed - cannot edit completed tasks
+    if (userTask.status === 'approved') {
+      return sendError(res, 'Không thể sửa task đã hoàn thành', 400);
+    }
+    
+    // If reassigning to different employee
+    if (updates.employeeId && updates.employeeId !== userTask.employeeId.toString()) {
+      const Employee = require('../models/Employee');
+      const newEmployee = await Employee.findById(updates.employeeId);
+      
+      if (!newEmployee) {
+        return sendError(res, 'Employee not found', 404);
+      }
+      
+      if (newEmployee.Status !== 'Đang hoạt động') {
+        return sendError(res, 'Employee is not active', 400);
+      }
+      
+      // Check if new employee already has this task
+      const existingTask = await UserTask.findOne({
+        broadcastId: userTask.broadcastId._id,
+        employeeId: updates.employeeId
+      });
+      
+      if (existingTask && existingTask._id.toString() !== taskId) {
+        return sendError(res, `Nhân viên ${newEmployee.FullName} đã có task này rồi`, 400);
+      }
+      
+      userTask.employeeId = updates.employeeId;
+      
+      // Update StoreTask if employee is from different branch
+      if (newEmployee.ID_Branch.toString() !== userTask.employeeId.ID_Branch.toString()) {
+        const StoreTask = require('../models/StoreTask');
+        
+        // Find or create StoreTask for new branch
+        let newStoreTask = await StoreTask.findOne({
+          broadcastId: userTask.broadcastId._id,
+          storeId: newEmployee.ID_Branch
+        });
+        
+        if (!newStoreTask) {
+          // Find manager for new branch
+          const managers = await Employee.find({
+            ID_Branch: newEmployee.ID_Branch,
+            Status: 'Đang hoạt động'
+          }).populate('ID_GroupUser');
+          
+          let manager = null;
+          for (const emp of managers) {
+            const role = await getEmployeeRole(emp);
+            if (role === 'manager') {
+              manager = emp;
+              break;
+            }
+          }
+          
+          if (!manager) manager = newEmployee; // Fallback
+          
+          newStoreTask = new StoreTask({
+            broadcastId: userTask.broadcastId._id,
+            storeId: newEmployee.ID_Branch,
+            managerId: manager._id,
+            status: 'pending',
+            assignedEmployees: [newEmployee._id]
+          });
+          
+          await newStoreTask.save();
+        } else {
+          // Add to assignedEmployees if not already there
+          if (!newStoreTask.assignedEmployees.includes(newEmployee._id)) {
+            newStoreTask.assignedEmployees.push(newEmployee._id);
+            await newStoreTask.save();
+          }
+        }
+        
+        // Remove from old StoreTask
+        const oldStoreTask = await StoreTask.findById(userTask.storeTaskId);
+        if (oldStoreTask) {
+          oldStoreTask.assignedEmployees = oldStoreTask.assignedEmployees.filter(
+            id => id.toString() !== userTask.employeeId._id.toString()
+          );
+          await oldStoreTask.save();
+        }
+        
+        userTask.storeTaskId = newStoreTask._id;
+      }
+    }
+    
+    // Update broadcast-related fields (if editing broadcast details)
+    if (updates.title || updates.description || updates.priority || updates.deadline || updates.checklist) {
+      const broadcast = await userTask.broadcastId;
+      
+      if (updates.title) broadcast.title = updates.title;
+      if (updates.description) broadcast.description = updates.description;
+      if (updates.priority) broadcast.priority = updates.priority;
+      if (updates.deadline) broadcast.deadline = new Date(updates.deadline);
+      
+      if (updates.checklist) {
+        // Update broadcast checklist
+        broadcast.checklist = updates.checklist.map(item => ({
+          task: item.task,
+          note: item.note || '',
+          required: item.required !== undefined ? item.required : true
+        }));
+        
+        // Update UserTask checklist
+        userTask.checklist = updates.checklist.map(item => ({
+          task: item.task,
+          note: item.note || '',
+          required: item.required !== undefined ? item.required : true,
+          isCompleted: false
+        }));
+      }
+      
+      await broadcast.save();
+    }
+    
+    await userTask.save();
+    
+    console.log(`[updateUserTask] Task updated successfully`);
+    return sendSuccess(res, 'Task updated successfully', { task: userTask });
+    
+  } catch (error) {
+    console.error('[updateUserTask] Error:', error);
+    return sendError(res, error.message, 500);
+  }
+};
+
+/**
+ * @desc    Delete a UserTask (cannot delete completed tasks)
+ * @route   DELETE /api/broadcasts/user-tasks/:taskId
+ * @access  Private/Admin
+ */
+const deleteUserTask = async (req, res) => {
+  try {
+    const { taskId } = req.params;
+    
+    console.log(`[deleteUserTask] Deleting task ${taskId}`);
+    
+    // Find the UserTask
+    const UserTask = require('../models/UserTask');
+    const userTask = await UserTask.findById(taskId);
+    
+    if (!userTask) {
+      return sendError(res, 'Task not found', 404);
+    }
+    
+    // Check if task is completed - cannot delete completed tasks
+    if (userTask.status === 'approved') {
+      return sendError(res, 'Không thể xóa task đã hoàn thành. Vui lòng truy cập database để xóa trực tiếp nếu cần thiết.', 400);
+    }
+    
+    // Remove employee from StoreTask assignedEmployees
+    const StoreTask = require('../models/StoreTask');
+    const storeTask = await StoreTask.findById(userTask.storeTaskId);
+    
+    if (storeTask) {
+      storeTask.assignedEmployees = storeTask.assignedEmployees.filter(
+        id => id.toString() !== userTask.employeeId.toString()
+      );
+      
+      // If no more assigned employees, delete the StoreTask too
+      if (storeTask.assignedEmployees.length === 0) {
+        await StoreTask.findByIdAndDelete(storeTask._id);
+        console.log(`[deleteUserTask] Also deleted empty StoreTask ${storeTask._id}`);
+      } else {
+        await storeTask.save();
+      }
+    }
+    
+    // Delete the UserTask
+    await UserTask.findByIdAndDelete(taskId);
+    
+    console.log(`[deleteUserTask] Task deleted successfully`);
+    return sendSuccess(res, 'Task deleted successfully');
+    
+  } catch (error) {
+    console.error('[deleteUserTask] Error:', error);
+    return sendError(res, error.message, 500);
+  }
+};
+
 module.exports = {
   createBroadcast,
   getBroadcasts,
   getBroadcastById,
   updateBroadcast,
   deleteBroadcast,
-  publishBroadcast
+  publishBroadcast,
+  assignBroadcast,
+  updateUserTask,
+  deleteUserTask
 };

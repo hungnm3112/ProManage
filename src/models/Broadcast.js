@@ -55,25 +55,46 @@ const recurringSchema = new mongoose.Schema({
   },
   frequency: {
     type: String,
-    enum: ['daily', 'weekly', 'monthly'],
+    enum: ['daily', 'weekly', 'monthly', 'yearly'],
     required: function() {
       return this.enabled;
     }
   },
-  dayOfWeek: {
-    type: Number,
-    min: 0,
-    max: 6,
-    required: function() {
-      return this.enabled && this.frequency === 'weekly';
-    }
-  },
-  dayOfMonth: {
-    type: Number,
-    min: 1,
-    max: 31,
-    required: function() {
-      return this.enabled && this.frequency === 'monthly';
+  pattern: {
+    // Common: Time in HH:mm format
+    time: {
+      type: String,
+      validate: {
+        validator: function(v) {
+          return !v || /^([0-1][0-9]|2[0-3]):[0-5][0-9]$/.test(v);
+        },
+        message: 'Time must be in HH:mm format'
+      }
+    },
+    
+    // For weekly: Day of week (0-6, Sunday-Saturday)
+    dayOfWeek: {
+      type: Number,
+      min: 0,
+      max: 6
+    },
+    
+    // For monthly/yearly: Day of month (1-31 or "last")
+    dayOfMonth: {
+      type: mongoose.Schema.Types.Mixed,
+      validate: {
+        validator: function(v) {
+          return !v || v === 'last' || (Number.isInteger(v) && v >= 1 && v <= 31);
+        },
+        message: 'Day of month must be 1-31 or "last"'
+      }
+    },
+    
+    // For yearly: Month (1-12)
+    month: {
+      type: Number,
+      min: 1,
+      max: 12
     }
   }
 }, { _id: false });

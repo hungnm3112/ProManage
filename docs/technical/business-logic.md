@@ -139,12 +139,12 @@ function isEmployeeActive(employee) {
 
 ### Mapping Schema cũ → Schema mới
 
-Hệ thống hiện tại sử dụng collections `Employee` và `Brand`, cần adapter để map với logic mới.
+Hệ thống hiện tại sử dụng collections `Employee` và `Branch`, cần adapter để map với logic mới.
 
 ```javascript
 // Model adapters
 const EmployeeModel = mongoose.model('Employee');  // Collection: Employee
-const BrandModel = mongoose.model('Brand');        // Collection: Brand
+const BranchModel = mongoose.model('Brand');       // Collection: Branch (model name: Brand)
 const GroupUserModel = mongoose.model('GroupUser'); // Collection: GroupUser
 
 // Helper: Get role từ ID_GroupUser

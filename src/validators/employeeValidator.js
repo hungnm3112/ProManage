@@ -189,7 +189,7 @@ exports.validateGetEmployees = [
   
   query('limit')
     .optional()
-    .isInt({ min: 1, max: 100 }).withMessage('Limit phải từ 1-100'),
+    .isInt({ min: 1, max: 1000 }).withMessage('Limit phải từ 1-1000'),
   
   query('search')
     .optional()

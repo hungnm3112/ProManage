@@ -47,7 +47,7 @@ router.get(
 router.get(
   '/:id/employees',
   authenticate,
-  authorize(['admin', 'manager']),
+  authorize('admin', 'manager'),
   brandValidator.validateGetBrandEmployees,
   brandController.getBrandEmployees
 );
@@ -60,7 +60,7 @@ router.get(
 router.put(
   '/:id',
   authenticate,
-  authorize(['admin']),
+  authorize('admin'),
   brandValidator.validateUpdateBrand,
   brandController.updateBrand
 );
@@ -73,7 +73,7 @@ router.put(
 router.patch(
   '/:id/manager',
   authenticate,
-  authorize(['admin']),
+  authorize('admin'),
   brandValidator.validateAssignManager,
   brandController.assignManager
 );

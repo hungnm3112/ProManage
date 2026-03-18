@@ -7,7 +7,7 @@
 Hệ thống sử dụng 7 collections:
 
 1. **Employee** - Tài khoản người dùng (Admin, Manager, Employee) - **HIỆN TẠI**
-2. **Brand** - Cửa hàng (32 chi nhánh) - **HIỆN TẠI**
+2. **Branch** - Cửa hàng (32 chi nhánh) - **HIỆN TẠI** (Model: Brand, Collection: Branch)
 3. **GroupUser** - Chức vụ/Phòng ban - **HIỆN TẠI**
 4. **broadcasts** - Broadcasts do Admin tạo - **SẼ PHÁT TRIỂN**
 5. **store_tasks** - Tasks assigned cho stores - **SẼ PHÁT TRIỂN**
@@ -128,9 +128,12 @@ db.Employee.createIndex({ unsign_search: "text" });
 
 ---
 
-## 🏪 Brand Collection
+## 🏪 Branch Collection
 
 **Collection hiện tại** chứa thông tin chi nhánh.
+
+> **Lưu ý**: Model name là `Brand` nhưng MongoDB collection name là `Branch`  
+> Trong code: `const Brand = require('./models/Brand')` → Collection: `Branch`
 
 ```javascript
 {
@@ -159,9 +162,9 @@ db.Employee.createIndex({ unsign_search: "text" });
 ### Indexes
 
 ```javascript
-db.Brand.createIndex({ ID_System: 1 });
-db.Brand.createIndex({ Active: 1 });
-db.Brand.createIndex({ Name: "text" });
+db.Branch.createIndex({ ID_System: 1 });
+db.Branch.createIndex({ Active: 1 });
+db.Branch.createIndex({ Name: "text" });
 ```
 
 ### Example

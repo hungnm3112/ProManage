@@ -21,7 +21,7 @@ const { authenticate, authorize } = require('../middlewares/authMiddleware');
 router.post(
   '/',
   authenticate,
-  authorize(['admin']),
+  authorize('admin'),
   broadcastValidator.validateCreateBroadcast,
   broadcastController.createBroadcast
 );
@@ -34,7 +34,7 @@ router.post(
 router.get(
   '/',
   authenticate,
-  authorize(['admin']),
+  authorize('admin'),
   broadcastValidator.validateGetBroadcasts,
   broadcastController.getBroadcasts
 );
@@ -47,7 +47,7 @@ router.get(
 router.get(
   '/:id',
   authenticate,
-  authorize(['admin']),
+  authorize('admin'),
   broadcastValidator.validateGetBroadcastById,
   broadcastController.getBroadcastById
 );
@@ -60,7 +60,7 @@ router.get(
 router.put(
   '/:id',
   authenticate,
-  authorize(['admin']),
+  authorize('admin'),
   broadcastValidator.validateUpdateBroadcast,
   broadcastController.updateBroadcast
 );
@@ -73,7 +73,7 @@ router.put(
 router.delete(
   '/:id',
   authenticate,
-  authorize(['admin']),
+  authorize('admin'),
   broadcastValidator.validateDeleteBroadcast,
   broadcastController.deleteBroadcast
 );
@@ -86,9 +86,49 @@ router.delete(
 router.post(
   '/:id/publish',
   authenticate,
-  authorize(['admin']),
+  authorize('admin'),
   broadcastValidator.validatePublishBroadcast,
   broadcastController.publishBroadcast
+);
+
+/**
+ * @route   POST /api/broadcasts/:id/assign
+ * @desc    Assign broadcast to stores (managers) or individual employees
+ * @access  Private (admin only)
+ * @body    { storeAssignments: [{storeId, employeeIds}] } OR { employeeIds: [] }
+ */
+router.post(
+  '/:id/assign',
+  authenticate,
+  authorize('admin'),
+  broadcastValidator.validateAssignBroadcast,
+  broadcastController.assignBroadcast
+);
+
+/**
+ * @route   PUT /api/broadcasts/user-tasks/:taskId
+ * @desc    Update a user task (admin can edit task details and reassign)
+ * @access  Private (admin only)
+ */
+router.put(
+  '/user-tasks/:taskId',
+  authenticate,
+  authorize('admin'),
+  broadcastValidator.validateUpdateUserTask,
+  broadcastController.updateUserTask
+);
+
+/**
+ * @route   DELETE /api/broadcasts/user-tasks/:taskId
+ * @desc    Delete a user task (cannot delete completed tasks)
+ * @access  Private (admin only)
+ */
+router.delete(
+  '/user-tasks/:taskId',
+  authenticate,
+  authorize('admin'),
+  broadcastValidator.validateDeleteUserTask,
+  broadcastController.deleteUserTask
 );
 
 module.exports = router;

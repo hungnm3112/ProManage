@@ -59,19 +59,25 @@ const validateCreateBroadcast = [
     }),
   
   body('assignedStores')
-    .notEmpty()
-    .withMessage('Assigned stores are required')
-    .isArray({ min: 1 })
-    .withMessage('At least one store must be assigned')
-    .custom((value) => {
+    .optional()
+    .isArray()
+    .withMessage('Assigned stores must be an array')
+    .custom((value, { req }) => {
+      // If status is 'active', assignedStores must have at least one store
+      if (req.body.status === 'active' && (!value || value.length === 0)) {
+        throw new Error('At least one store must be assigned when publishing (status = active)');
+      }
+      
       if (!Array.isArray(value)) {
         throw new Error('Assigned stores must be an array');
       }
       
       // Check if all items are valid MongoDB ObjectIds
-      const invalidIds = value.filter(id => !mongoose.Types.ObjectId.isValid(id));
-      if (invalidIds.length > 0) {
-        throw new Error('All assigned stores must be valid store IDs');
+      if (value.length > 0) {
+        const invalidIds = value.filter(id => !mongoose.Types.ObjectId.isValid(id));
+        if (invalidIds.length > 0) {
+          throw new Error('All assigned stores must be valid store IDs');
+        }
       }
       
       return true;
@@ -264,11 +270,136 @@ const validatePublishBroadcast = [
   validate
 ];
 
+/**
+ * Validate POST /api/broadcasts/:id/assign
+ * Assign broadcast to stores with specific employees or individual employees
+ */
+const validateAssignBroadcast = [
+  param('id')
+    .isMongoId()
+    .withMessage('Invalid broadcast ID format'),
+  
+  body('storeAssignments')
+    .optional()
+    .isArray()
+    .withMessage('storeAssignments must be an array')
+    .custom((value) => {
+      if (value && value.length > 0) {
+        // Check if each item has required structure { storeId, employeeIds }
+        for (const assignment of value) {
+          if (!assignment.storeId || !mongoose.Types.ObjectId.isValid(assignment.storeId)) {
+            throw new Error('Each store assignment must have a valid storeId');
+          }
+          
+          if (!assignment.employeeIds || !Array.isArray(assignment.employeeIds) || assignment.employeeIds.length === 0) {
+            throw new Error('Each store assignment must have at least one employeeId');
+          }
+          
+          const invalidIds = assignment.employeeIds.filter(id => !mongoose.Types.ObjectId.isValid(id));
+          if (invalidIds.length > 0) {
+            throw new Error('All employee IDs must be valid MongoDB ObjectIds');
+          }
+        }
+      }
+      return true;
+    }),
+  
+  body('employeeIds')
+    .optional()
+    .isArray()
+    .withMessage('employeeIds must be an array')
+    .custom((value) => {
+      if (value && value.length > 0) {
+        const invalidIds = value.filter(id => !mongoose.Types.ObjectId.isValid(id));
+        if (invalidIds.length > 0) {
+          throw new Error('All employee IDs must be valid MongoDB ObjectIds');
+        }
+      }
+      return true;
+    }),
+  
+  // Custom validation: Must have either storeAssignments OR employeeIds, not both, not neither
+  body()
+    .custom((value, { req }) => {
+      const hasStoreAssignments = req.body.storeAssignments && Array.isArray(req.body.storeAssignments) && req.body.storeAssignments.length > 0;
+      const hasEmployeeIds = req.body.employeeIds && Array.isArray(req.body.employeeIds) && req.body.employeeIds.length > 0;
+      
+      if (!hasStoreAssignments && !hasEmployeeIds) {
+        throw new Error('Must provide either storeAssignments or employeeIds');
+      }
+      
+      if (hasStoreAssignments && hasEmployeeIds) {
+        throw new Error('Cannot assign to both stores and individual employees at the same time. Please choose one.');
+      }
+      
+      return true;
+    }),
+  
+  validate
+];
+
+/**
+ * Validate PUT /api/broadcasts/user-tasks/:taskId
+ */
+const validateUpdateUserTask = [
+  param('taskId')
+    .custom((value) => mongoose.Types.ObjectId.isValid(value))
+    .withMessage('Invalid task ID'),
+  
+  body('title')
+    .optional()
+    .trim()
+    .isLength({ min: 1, max: 200 })
+    .withMessage('Title must be between 1 and 200 characters'),
+  
+  body('description')
+    .optional()
+    .trim()
+    .isLength({ min: 1 })
+    .withMessage('Description cannot be empty'),
+  
+  body('priority')
+    .optional()
+    .isIn(['low', 'medium', 'high', 'urgent'])
+    .withMessage('Priority must be one of: low, medium, high, urgent'),
+  
+  body('deadline')
+    .optional()
+    .isISO8601()
+    .withMessage('Deadline must be a valid date'),
+  
+  body('checklist')
+    .optional()
+    .isArray()
+    .withMessage('Checklist must be an array'),
+  
+  body('employeeId')
+    .optional()
+    .custom((value) => mongoose.Types.ObjectId.isValid(value))
+    .withMessage('Invalid employee ID'),
+  
+  validate
+];
+
+/**
+ * Validate DELETE /api/broadcasts/user-tasks/:taskId
+ */
+const validateDeleteUserTask = [
+  param('taskId')
+    .custom((value) => mongoose.Types.ObjectId.isValid(value))
+    .withMessage('Invalid task ID'),
+  
+  validate
+];
+
 module.exports = {
   validateCreateBroadcast,
   validateUpdateBroadcast,
   validateGetBroadcasts,
   validateGetBroadcastById,
   validateDeleteBroadcast,
-  validatePublishBroadcast
+  validatePublishBroadcast,
+  validateAssignBroadcast,
+  validateUpdateUserTask,
+  validateDeleteUserTask
 };

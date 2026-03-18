@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hướng dẫn sử dụng - ProManage</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/css/user-guide.css">
+</head>
+<body class="bg-gray-50">
+  <!-- Header -->
+  <nav class="bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between items-center h-16">
+        <div class="flex items-center">
+          <a href="/" class="text-2xl font-bold">📘 ProManage</a>
+          <span class="ml-4 text-purple-200">Hướng dẫn sử dụng</span>
+        </div>
+        <div class="flex items-center space-x-4">
+          <a href="/login" class="bg-white text-purple-600 px-4 py-2 rounded-lg hover:bg-purple-50 transition font-semibold">
+            Đăng nhập
+          </a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <!-- Quick Navigation -->
+    <div class="bg-white rounded-lg shadow-sm p-6 mb-8">
+      <h2 class="text-2xl font-bold text-gray-900 mb-4">🧭 Điều hướng nhanh</h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <a href="#admin-guide" class="block p-4 border-2 border-purple-200 rounded-lg hover:border-purple-500 hover:bg-purple-50 transition">
+          <div class="text-3xl mb-2">👑</div>
+          <h3 class="font-bold text-purple-600">Hướng dẫn Admin</h3>
+          <p class="text-sm text-gray-600">Tạo và quản lý broadcast</p>
+        </a>
+        <a href="#manager-guide" class="block p-4 border-2 border-blue-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition">
+          <div class="text-3xl mb-2">👔</div>
+          <h3 class="font-bold text-blue-600">Hướng dẫn Manager</h3>
+          <p class="text-sm text-gray-600">Nhận việc, giao việc, duyệt</p>
+        </a>
+        <a href="#employee-guide" class="block p-4 border-2 border-green-200 rounded-lg hover:border-green-500 hover:bg-green-50 transition">
+          <div class="text-3xl mb-2">👤</div>
+          <h3 class="font-bold text-green-600">Hướng dẫn Employee</h3>
+          <p class="text-sm text-gray-600">Thực hiện và báo cáo task</p>
+        </a>
+      </div>
+    </div>
+
+    <!-- Workflow Overview -->
+    <div class="bg-white rounded-lg shadow-sm p-6 mb-8">
+      <h2 class="text-2xl font-bold text-gray-900 mb-4">🔄 Quy trình làm việc tổng quan</h2>
+      <div class="space-y-4">
+        <div class="flex items-start">
+          <div class="flex-shrink-0 w-12 h-12 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center font-bold text-lg">1</div>
+          <div class="ml-4">
+            <h3 class="font-bold text-purple-600">Admin tạo Công việc</h3>
+            <p class="text-gray-600">Admin tạo công việc mới, thêm checklist, chọn chi nhánh, publish công việc</p>
+          </div>
+        </div>
+        <div class="flex items-start">
+          <div class="flex-shrink-0 w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold text-lg">2</div>
+          <div class="ml-4">
+            <h3 class="font-bold text-blue-600">Manager nhận việc</h3>
+            <p class="text-gray-600">Manager xem Store Task, chọn nhân viên phù hợp, giao việc cho nhân viên</p>
+          </div>
+        </div>
+        <div class="flex items-start">
+          <div class="flex-shrink-0 w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center font-bold text-lg">3</div>
+          <div class="ml-4">
+            <h3 class="font-bold text-green-600">Employee thực hiện</h3>
+            <p class="text-gray-600">Nhân viên xem task, làm theo checklist, chụp ảnh chứng minh, upload và submit</p>
+          </div>
+        </div>
+        <div class="flex items-start">
+          <div class="flex-shrink-0 w-12 h-12 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center font-bold text-lg">4</div>
+          <div class="ml-4">
+            <h3 class="font-bold text-orange-600">Manager duyệt</h3>
+            <p class="text-gray-600">Manager kiểm tra, xem ảnh chứng minh, approve hoặc reject với feedback</p>
+          </div>
+        </div>
+        <div class="flex items-start">
+          <div class="flex-shrink-0 w-12 h-12 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center font-bold text-lg">5</div>
+          <div class="ml-4">
+            <h3 class="font-bold text-purple-600">Hoàn thành tự động</h3>
+            <p class="text-gray-600">Khi tất cả UserTask approved → StoreTask complete → Admin xem báo cáo</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Admin Guide -->
+    <div id="admin-guide" class="bg-white rounded-lg shadow-sm p-6 mb-8">
+      <div class="flex items-center mb-6">
+        <div class="text-4xl mr-4">👑</div>
+        <h2 class="text-3xl font-bold text-purple-600">Hướng dẫn Admin</h2>
+      </div>
+
+      <!-- Create Broadcast -->
+      <div class="mb-8">
+        <h3 class="text-xl font-bold text-gray-900 mb-4 flex items-center">
+          <span class="bg-purple-100 text-purple-600 w-8 h-8 rounded-full flex items-center justify-center mr-3">1</span>
+          Tạo Broadcast mới
+        </h3>
+        <div class="bg-gray-50 p-4 rounded-lg mb-4">
+          <p class="font-semibold mb-2">API Endpoint:</p>
+          <code class="bg-gray-800 text-green-400 px-3 py-1 rounded">POST /api/broadcasts</code>
+        </div>
+        <ol class="list-decimal list-inside space-y-2 text-gray-700 ml-4">
+          <li>Login với tài khoản Admin (Tổng giám đốc, Phó TGĐ, GĐ khu vực, Kho tổng)</li>
+          <li>Vào <strong>Admin Dashboard</strong></li>
+          <li>Click <strong>“Tạo Công việc mới”</strong> (nút tím góc trên bên phải)</li>
+          <li>Điền thông tin:
+            <ul class="list-disc list-inside ml-6 mt-2">
+              <li><strong>Tiêu đề:</strong> VD: "Kiểm tra hệ thống POS tháng 3/2026"</li>
+              <li><strong>Mô tả:</strong> Chi tiết công việc cần làm</li>
+              <li><strong>Priority:</strong> Low / Medium / High / Urgent</li>
+              <li><strong>Deadline:</strong> Ngày hết hạn (VD: 7 ngày sau)</li>
+              <li><strong>Recurring:</strong> (Tùy chọn) Daily/Weekly/Monthly nếu muốn lặp lại</li>
+            </ul>
+          </li>
+          <li>Thêm <strong>Checklist Items:</strong>
+            <ul class="list-disc list-inside ml-6 mt-2">
+              <li>VD: "1. Kiểm tra máy in bill"</li>
+              <li>VD: "2. Cập nhật phần mềm"</li>
+              <li>VD: "3. Chụp ảnh màn hình hệ thống"</li>
+              <li>Click "Thêm checklist item" để thêm nhiều items</li>
+            </ul>
+          </li>
+          <li>Click <strong>“💾 Lưu Công việc”</strong></li>
+          <li>✅ Công việc được tạo với <strong>status: draft</strong></li>
+        </ol>
+        <div class="bg-yellow-50 p-3 rounded-lg border border-yellow-200 mt-3">
+          <p class="text-yellow-800"><strong>📝 Lưu ý:</strong> Công việc mới tạo sẽ ở trạng thái <strong>draft</strong> và chưa được giao cho chi nhánh nào. Bạn cần <strong>Publish</strong> (bước 2) để chọn chi nhánh và giao việc.</p>
+        </div>
+      </div>
+
+      <!-- Publish Broadcast -->
+      <div class="mb-8">
+        <h3 class="text-xl font-bold text-gray-900 mb-4 flex items-center">
+          <span class="bg-purple-100 text-purple-600 w-8 h-8 rounded-full flex items-center justify-center mr-3">2</span>
+          Publish Broadcast
+        </h3>
+        <div class="bg-gray-50 p-4 rounded-lg mb-4">
+          <p class="font-semibold mb-2">API Endpoint:</p>
+          <code class="bg-gray-800 text-green-400 px-3 py-1 rounded">POST /api/broadcasts/:id/publish</code>
+        </div>
+        <ol class="list-decimal list-inside space-y-2 text-gray-700 ml-4">
+          <li>Chọn công việc ở trạng thái <strong>draft</strong></li>
+          <li>Click <strong>"Chọn chi nhánh"</strong></li>
+          <li>Chọn các chi nhánh cần giao việc (có thể chọn nhiều):
+            <ul class="list-disc list-inside ml-6 mt-2">
+              <li>Tích checkbox các chi nhánh</li>
+              <li>Hoặc "Chọn tất cả" nếu giao toàn bộ</li>
+            </ul>
+          </li>
+          <li>Click <strong>"Publish"</strong></li>
+          <li>✅ <strong>Kết quả:</strong>
+            <ul class="list-disc list-inside ml-6 mt-2">
+              <li>Công việc chuyển sang status: <strong>active</strong></li>
+              <li>Tự động tạo <strong>StoreTask</strong> cho mỗi chi nhánh</li>
+              <li>Manager các chi nhánh nhận được notification</li>
+            </ul>
+          </li>
+        </ol>
+      </div>
+
+      <!-- View Dashboard -->
+      <div class="mb-8">
+        <h3 class="text-xl font-bold text-gray-900 mb-4 flex items-center">
+          <span class="bg-purple-100 text-purple-600 w-8 h-8 rounded-full flex items-center justify-center mr-3">3</span>
+          Xem Dashboard & Báo cáo
+        </h3>
+        <div class="bg-gray-50 p-4 rounded-lg mb-4">
+          <p class="font-semibold mb-2">API Endpoint:</p>
+          <code class="bg-gray-800 text-green-400 px-3 py-1 rounded">GET /api/dashboard/admin</code>
+        </div>
+        <ul class="list-disc list-inside space-y-2 text-gray-700 ml-4">
+          <li><strong>Tổng số Công việc:</strong> Tổng số công việc đã tạo</li>
+          <li><strong>Công việc Đang chạy:</strong> Số công việc đang active</li>
+          <li><strong>Total Stores:</strong> Tổng số chi nhánh</li>
+          <li><strong>Completed This Month:</strong> Số task hoàn thành tháng này</li>
+          <li><strong>Overdue Tasks:</strong> Số task quá hạn</li>
+          <li><strong>Top Performing Stores:</strong> Chi nhánh có completion rate cao nhất</li>
+          <li><strong>Công việc Gần đây:</strong> 10 công việc gần nhất</li>
+        </ul>
+      </div>
+
+      <!-- Recurring Broadcasts -->
+      <div class="mb-8 bg-blue-50 p-4 rounded-lg border-l-4 border-blue-500">
+        <h4 class="font-bold text-blue-900 mb-2">💡 Tip: Công việc Lặp lại (Recurring)</h4>
+        <p class="text-blue-800">Nếu bật <strong>Recurring</strong>, hệ thống tự động tạo công việc mới theo lịch:</p>
+        <ul class="list-disc list-inside mt-2 text-blue-800">
+          <li><strong>Daily:</strong> Mỗi ngày 00:00</li>
+          <li><strong>Weekly:</strong> Mỗi tuần (chọn thứ)</li>
+          <li><strong>Monthly:</strong> Mỗi tháng (chọn ngày)</li>
+        </ul>
+        <p class="mt-2 text-blue-800">Cron job chạy lúc 00:00 (Asia/Ho_Chi_Minh) mỗi ngày.</p>
+        
+        <div class="mt-4 bg-white p-3 rounded border border-blue-300">
+          <p class="font-bold text-blue-900 mb-2">📅 Cách tính Deadline cho Recurring:</p>
+          <ul class="list-disc list-inside text-blue-800 text-sm space-y-1">
+            <li><strong>Gợi ý deadline khi tạo:</strong>
+              <ul class="list-circle list-inside ml-6 mt-1">
+                <li>Daily → Deadline = Ngày tạo + 1 ngày</li>
+                <li>Weekly → Deadline = Ngày tạo + 7 ngày</li>
+                <li>Monthly → Deadline = Ngày tạo + 30 ngày</li>
+              </ul>
+            </li>
+            <li class="mt-2"><strong>Logic tự động:</strong> Hệ thống tính duration từ ngày publish đến deadline gốc, sau đó áp dụng cùng duration cho công việc tiếp theo</li>
+            <li><strong>Ví dụ:</strong> Nếu công việc gốc có deadline = 7 ngày sau khi publish, thì mỗi công việc mới cũng sẽ có deadline = 7 ngày từ lúc được tạo</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Manager Guide -->
+    <div id="manager-guide" class="bg-white rounded-lg shadow-sm p-6 mb-8">
+      <div class="flex items-center mb-6">
+        <div class="text-4xl mr-4">👔</div>
+        <h2 class="text-3xl font-bold text-blue-600">Hướng dẫn Manager (Giám đốc chi nhánh)</h2>
+      </div>
+
+      <!-- View Store Tasks -->
+      <div class="mb-8">
+        <h3 class="text-xl font-bold text-gray-900 mb-4 flex items-center">
+          <span class="bg-blue-100 text-blue-600 w-8 h-8 rounded-full flex items-center justify-center mr-3">1</span>
+          Xem Store Tasks
+        </h3>
+        <div class="bg-gray-50 p-4 rounded-lg mb-4">
+          <p class="font-semibold mb-2">API Endpoint:</p>
+          <code class="bg-gray-800 text-green-400 px-3 py-1 rounded">GET /api/store-tasks</code>
+        </div>
+        <ol class="list-decimal list-inside space-y-2 text-gray-700 ml-4">
+          <li>Login với tài khoản Manager (Giám đốc chi nhánh)</li>
+          <li>Vào <strong>Manager Dashboard</strong></li>
+          <li>Xem danh sách <strong>Store Tasks</strong> của chi nhánh mình</li>
+          <li>Thông tin hiển thị:
+            <ul class="list-disc list-inside ml-6 mt-2">
+              <li>Tên công việc</li>
+              <li>Mô tả công việc</li>
+              <li>Checklist items</li>
+              <li>Priority (Low/Medium/High/Urgent)</li>
+              <li>Deadline</li>
+              <li>Status: pending / in_progress / completed</li>
+            </ul>
+          </li>
+        </ol>
+      </div>
+
+      <!-- Assign Employees -->
+      <div class="mb-8">
+        <h3 class="text-xl font-bold text-gray-900 mb-4 flex items-center">
+          <span class="bg-blue-100 text-blue-600 w-8 h-8 rounded-full flex items-center justify-center mr-3">2</span>
+          Giao việc cho Nhân viên
+        </h3>
+        <div class="bg-gray-50 p-4 rounded-lg mb-4">
+          <p class="font-semibold mb-2">API Endpoint:</p>
+          <code class="bg-gray-800 text-green-400 px-3 py-1 rounded">POST /api/store-tasks/:id/assign</code>
+        </div>
+        <ol class="list-decimal list-inside space-y-2 text-gray-700 ml-4">
+          <li>Click vào Store Task cần giao</li>
+          <li>Click <strong>"Giao việc"</strong></li>
+          <li>Chọn nhân viên:
+            <ul class="list-disc list-inside ml-6 mt-2">
+              <li>Danh sách hiển thị nhân viên thuộc chi nhánh của bạn</li>
+              <li>Có thể chọn <strong>nhiều nhân viên</strong> (mỗi người 1 UserTask)</li>
+              <li>Xem thông tin: Tên, chức vụ, số task đang có</li>
+            </ul>
+          </li>
+          <li>Click <strong>"Xác nhận giao việc"</strong></li>
+          <li>✅ <strong>Kết quả:</strong>
+            <ul class="list-disc list-inside ml-6 mt-2">
+              <li>Tạo <strong>UserTask</strong> cho mỗi nhân viên được chọn</li>
+              <li>Nhân viên nhận notification</li>
+              <li>StoreTask chuyển sang <strong>in_progress</strong></li>
+            </ul>
+          </li>
+        </ol>
+      </div>
+
+      <!-- Review Tasks -->
+      <div class="mb-8">
+        <h3 class="text-xl font-bold text-gray-900 mb-4 flex items-center">
+          <span class="bg-blue-100 text-blue-600 w-8 h-8 rounded-full flex items-center justify-center mr-3">3</span>
+          Duyệt công việc (Review)
+        </h3>
+        <div class="bg-gray-50 p-4 rounded-lg mb-4">
+          <p class="font-semibold mb-2">API Endpoints:</p>
+          <code class="bg-gray-800 text-green-400 px-3 py-1 rounded block mb-1">GET /api/reviews/pending</code>
+          <code class="bg-gray-800 text-green-400 px-3 py-1 rounded block mb-1">POST /api/reviews/:taskId/approve</code>
+          <code class="bg-gray-800 text-green-400 px-3 py-1 rounded">POST /api/reviews/:taskId/reject</code>
+        </div>
+        <ol class="list-decimal list-inside space-y-2 text-gray-700 ml-4">
+          <li>Vào <strong>"Pending Reviews"</strong></li>
+          <li>Xem danh sách UserTask đang chờ duyệt (status: submitted)</li>
+          <li>Click vào task để xem chi tiết:
+            <ul class="list-disc list-inside ml-6 mt-2">
+              <li>Checklist items (đã check items nào?)</li>
+              <li>Evidence files (ảnh, video chứng minh)</li>
+              <li>Note từ nhân viên</li>
+            </ul>
+          </li>
+          <li><strong>Nếu OK:</strong> Click <strong>"Approve"</strong>
+            <ul class="list-disc list-inside ml-6 mt-2">
+              <li>Có thể thêm feedback (VD: "Làm tốt!")</li>
+              <li>UserTask chuyển sang <strong>approved</strong></li>
+            </ul>
+          </li>
+          <li><strong>Nếu không OK:</strong> Click <strong>"Reject"</strong>
+            <ul class="list-disc list-inside ml-6 mt-2">
+              <li>PHẢI nhập feedback (VD: "Ảnh không rõ, vui lòng chụp lại")</li>
+              <li>UserTask chuyển về <strong>in_progress</strong></li>
+              <li>Nhân viên sửa và submit lại</li>
+            </ul>
+          </li>
+        </ol>
+      </div>
+
+      <!-- Auto Completion -->
+      <div class="mb-8 bg-green-50 p-4 rounded-lg border-l-4 border-green-500">
+        <h4 class="font-bold text-green-900 mb-2">✨ Auto-completion Logic</h4>
+        <p class="text-green-800 mb-2">Hệ thống tự động complete khi:</p>
+        <ul class="list-disc list-inside text-green-800">
+          <li>Tất cả UserTask của StoreTask đều <strong>approved</strong> → StoreTask chuyển <strong>completed</strong></li>
+          <li>Tất cả StoreTask của Công việc đều <strong>completed</strong> → Công việc chuyển <strong>completed</strong></li>
+        </ul>
+        <p class="mt-2 text-green-800"><strong>⚠️ Lưu ý:</strong> Nếu có 1 UserTask bị reject → StoreTask vẫn pending cho đến khi tất cả approved</p>
+      </div>
+    </div>
+
+    <!-- Employee Guide -->
+    <div id="employee-guide" class="bg-white rounded-lg shadow-sm p-6 mb-8">
+      <div class="flex items-center mb-6">
+        <div class="text-4xl mr-4">👤</div>
+        <h2 class="text-3xl font-bold text-green-600">Hướng dẫn Employee (Nhân viên)</h2>
+      </div>
+
+      <!-- View My Tasks -->
+      <div class="mb-8">
+        <h3 class="text-xl font-bold text-gray-900 mb-4 flex items-center">
+          <span class="bg-green-100 text-green-600 w-8 h-8 rounded-full flex items-center justify-center mr-3">1</span>
+          Xem công việc được giao
+        </h3>
+        <div class="bg-gray-50 p-4 rounded-lg mb-4">
+          <p class="font-semibold mb-2">API Endpoint:</p>
+          <code class="bg-gray-800 text-green-400 px-3 py-1 rounded">GET /api/my-tasks</code>
+        </div>
+        <ol class="list-decimal list-inside space-y-2 text-gray-700 ml-4">
+          <li>Login với tài khoản Employee</li>
+          <li>Vào <strong>Employee Dashboard</strong></li>
+          <li>Xem <strong>"My Tasks"</strong> - danh sách công việc được giao</li>
+          <li>Thông tin task:
+            <ul class="list-disc list-inside ml-6 mt-2">
+              <li>Tên công việc (từ broadcast)</li>
+              <li>Mô tả chi tiết</li>
+              <li>Checklist items cần làm</li>
+              <li>Deadline</li>
+              <li>Priority</li>
+              <li>Status: pending / in_progress / submitted / approved / rejected</li>
+            </ul>
+          </li>
+        </ol>
+      </div>
+
+      <!-- Update Checklist -->
+      <div class="mb-8">
+        <h3 class="text-xl font-bold text-gray-900 mb-4 flex items-center">
+          <span class="bg-green-100 text-green-600 w-8 h-8 rounded-full flex items-center justify-center mr-3">2</span>
+          Thực hiện công việc & Update Checklist
+        </h3>
+        <div class="bg-gray-50 p-4 rounded-lg mb-4">
+          <p class="font-semibold mb-2">API Endpoint:</p>
+          <code class="bg-gray-800 text-green-400 px-3 py-1 rounded">PUT /api/my-tasks/:id/checklist</code>
+        </div>
+        <ol class="list-decimal list-inside space-y-2 text-gray-700 ml-4">
+          <li>Click vào task cần làm</li>
+          <li>Đọc kỹ checklist items</li>
+          <li>Làm từng bước theo checklist</li>
+          <li>Sau khi hoàn thành 1 item, <strong>tick checkbox</strong></li>
+          <li>VD Checklist:
+            <ul class="list-disc list-inside ml-6 mt-2">
+              <li>☑️ Kiểm tra máy in bill</li>
+              <li>☑️ Cập nhật phần mềm</li>
+              <li>☐ Chụp ảnh màn hình hệ thống (chưa xong)</li>
+            </ul>
+          </li>
+        </ol>
+      </div>
+
+      <!-- Upload Evidence -->
+      <div class="mb-8">
+        <h3 class="text-xl font-bold text-gray-900 mb-4 flex items-center">
+          <span class="bg-green-100 text-green-600 w-8 h-8 rounded-full flex items-center justify-center mr-3">3</span>
+          Upload Evidence (Chứng minh)
+        </h3>
+        <div class="bg-gray-50 p-4 rounded-lg mb-4">
+          <p class="font-semibold mb-2">API Endpoint:</p>
+          <code class="bg-gray-800 text-green-400 px-3 py-1 rounded">POST /api/my-tasks/:id/evidence</code>
+        </div>
+        <ol class="list-decimal list-inside space-y-2 text-gray-700 ml-4">
+          <li>Click <strong>"Upload Evidence"</strong></li>
+          <li>Chọn file từ máy:
+            <ul class="list-disc list-inside ml-6 mt-2">
+              <li><strong>Photos:</strong> PNG, JPG, JPEG (max 10MB/file)</li>
+              <li><strong>Videos:</strong> MP4, AVI, MOV (max 50MB/file)</li>
+              <li><strong>Documents:</strong> PDF, DOC, DOCX, XLS, XLSX (max 10MB)</li>
+            </ul>
+          </li>
+          <li>Có thể upload <strong>nhiều files</strong></li>
+          <li>File được lưu vào <code>/uploads/</code> trên server</li>
+          <li>Preview file trước khi submit</li>
+        </ol>
+        <div class="bg-yellow-50 p-3 rounded mt-4 border-l-4 border-yellow-500">
+          <p class="text-yellow-800"><strong>⚠️ Lưu ý:</strong> File size limits:</p>
+          <ul class="list-disc list-inside text-yellow-800 text-sm ml-4">
+            <li>Ảnh: Tối đa 10MB</li>
+            <li>Video: Tối đa 50MB</li>
+            <li>Document: Tối đa 10MB</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Submit Task -->
+      <div class="mb-8">
+        <h3 class="text-xl font-bold text-gray-900 mb-4 flex items-center">
+          <span class="bg-green-100 text-green-600 w-8 h-8 rounded-full flex items-center justify-center mr-3">4</span>
+          Submit Task để Manager duyệt
+        </h3>
+        <div class="bg-gray-50 p-4 rounded-lg mb-4">
+          <p class="font-semibold mb-2">API Endpoint:</p>
+          <code class="bg-gray-800 text-green-400 px-3 py-1 rounded">POST /api/my-tasks/:id/submit</code>
+        </div>
+        <ol class="list-decimal list-inside space-y-2 text-gray-700 ml-4">
+          <li>Đảm bảo đã:
+            <ul class="list-disc list-inside ml-6 mt-2">
+              <li>✅ Hoàn thành checklist items</li>
+              <li>✅ Upload đủ evidence (ảnh/video chứng minh)</li>
+            </ul>
+          </li>
+          <li>Thêm <strong>Note</strong> (tùy chọn):
+            <ul class="list-disc list-inside ml-6 mt-2">
+              <li>VD: "Đã kiểm tra hệ thống POS, tất cả hoạt động bình thường"</li>
+            </ul>
+          </li>
+          <li>Click <strong>"Submit"</strong></li>
+          <li>✅ <strong>Kết quả:</strong>
+            <ul class="list-disc list-inside ml-6 mt-2">
+              <li>UserTask chuyển sang <strong>submitted</strong></li>
+              <li>Manager nhận notification để review</li>
+              <li>Chờ Manager approve/reject</li>
+            </ul>
+          </li>
+        </ol>
+      </div>
+
+      <!-- Handle Rejection -->
+      <div class="mb-8 bg-orange-50 p-4 rounded-lg border-l-4 border-orange-500">
+        <h4 class="font-bold text-orange-900 mb-2">🔄 Nếu bị Reject</h4>
+        <ol class="list-decimal list-inside text-orange-800">
+          <li>Nhận notification từ Manager</li>
+          <li>Đọc <strong>feedback</strong> từ Manager (lý do reject)</li>
+          <li>Sửa lại theo yêu cầu:
+            <ul class="list-disc list-inside ml-6 mt-2">
+              <li>Upload lại ảnh rõ hơn</li>
+              <li>Hoàn thiện checklist items còn thiếu</li>
+              <li>Bổ sung thông tin</li>
+            </ul>
+          </li>
+          <li><strong>Submit lại</strong> sau khi sửa</li>
+          <li>Lặp lại cho đến khi được approve</li>
+        </ol>
+      </div>
+    </div>
+
+    <!-- Testing Guide -->
+    <div class="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg shadow-sm p-6 mb-8 border-2 border-indigo-200">
+      <h2 class="text-2xl font-bold text-indigo-900 mb-4">🧪 Hướng dẫn Test Full Workflow</h2>
+      
+      <div class="space-y-6">
+        <!-- Step 1 -->
+        <div class="bg-white p-4 rounded-lg">
+          <h3 class="font-bold text-purple-600 mb-2">Bước 1: Setup Test Data (Admin)</h3>
+          <ol class="list-decimal list-inside space-y-1 text-gray-700 ml-4">
+            <li>Login admin: <code class="bg-gray-200 px-2 py-1 rounded">0392029548 / 123456</code></li>
+            <li>Tạo công việc "Test kiểm tra hệ thống"</li>
+            <li>Thêm 3 checklist items</li>
+            <li>Set deadline: 3 ngày sau</li>
+            <li>Chọn 2-3 chi nhánh</li>
+            <li>Click "Publish"</li>
+          </ol>
+        </div>
+
+        <!-- Step 2 -->
+        <div class="bg-white p-4 rounded-lg">
+          <h3 class="font-bold text-blue-600 mb-2">Bước 2: Giao việc (Manager)</h3>
+          <ol class="list-decimal list-inside space-y-1 text-gray-700 ml-4">
+            <li>Dùng Account Switcher (nút góc dưới phải) → Chọn Manager account</li>
+            <li>Xem Store Tasks → Thấy task vừa tạo</li>
+            <li>Click "Giao việc"</li>
+            <li>Chọn 2-3 nhân viên</li>
+            <li>Click "Xác nhận"</li>
+          </ol>
+        </div>
+
+        <!-- Step 3 -->
+        <div class="bg-white p-4 rounded-lg">
+          <h3 class="font-bold text-green-600 mb-2">Bước 3: Thực hiện (Employee)</h3>
+          <ol class="list-decimal list-inside space-y-1 text-gray-700 ml-4">
+            <li>Switch to Employee account (bằng Account Switcher)</li>
+            <li>Xem My Tasks → Thấy task được giao</li>
+            <li>Click vào task → Update checklist (tick 3/3 items)</li>
+            <li>Upload 1-2 ảnh chứng minh</li>
+            <li>Thêm note: "Đã kiểm tra xong"</li>
+            <li>Click "Submit"</li>
+          </ol>
+        </div>
+
+        <!-- Step 4 -->
+        <div class="bg-white p-4 rounded-lg">
+          <h3 class="font-bold text-orange-600 mb-2">Bước 4: Duyệt (Manager)</h3>
+          <ol class="list-decimal list-inside space-y-1 text-gray-700 ml-4">
+            <li>Switch back to Manager</li>
+            <li>Vào "Pending Reviews"</li>
+            <li>Xem task vừa submit</li>
+            <li>Check evidence files</li>
+            <li>Click "Approve" với feedback "Tốt lắm!"</li>
+          </ol>
+        </div>
+
+        <!-- Step 5 -->
+        <div class="bg-white p-4 rounded-lg">
+          <h3 class="font-bold text-purple-600 mb-2">Bước 5: Verify (Admin)</h3>
+          <ol class="list-decimal list-inside space-y-1 text-gray-700 ml-4">
+            <li>Switch to Admin account</li>
+            <li>Xem Dashboard:</li>
+            <li>Completed This Month: +1</li>
+            <li>Top Stores: Chi nhánh vừa test nên top 1</li>
+            <li>Trạng thái Công việc: nếu tất cả StoreTasks done → completed</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="mt-6 bg-indigo-100 p-4 rounded-lg">
+        <p class="font-bold text-indigo-900 mb-2">⏱️ Thời gian test dự kiến:</p>
+        <ul class="list-disc list-inside text-indigo-800">
+          <li>Full workflow: 5-7 phút</li>
+          <li>Với Account Switcher: Không cần login/logout → Tiết kiệm 2-3 phút</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- API Reference Quick -->
+    <div class="bg-white rounded-lg shadow-sm p-6 mb-8">
+      <h2 class="text-2xl font-bold text-gray-900 mb-4">📡 API Endpoints Quick Reference</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <h3 class="font-bold text-purple-600 mb-2">Admin</h3>
+          <ul class="space-y-1 text-sm font-mono">
+            <li class="text-green-600">POST /api/broadcasts</li>
+            <li class="text-blue-600">GET /api/broadcasts</li>
+            <li class="text-orange-600">POST /api/broadcasts/:id/publish</li>
+            <li class="text-blue-600">GET /api/dashboard/admin</li>
+          </ul>
+        </div>
+        <div>
+          <h3 class="font-bold text-blue-600 mb-2">Manager</h3>
+          <ul class="space-y-1 text-sm font-mono">
+            <li class="text-blue-600">GET /api/store-tasks</li>
+            <li class="text-green-600">POST /api/store-tasks/:id/assign</li>
+            <li class="text-blue-600">GET /api/reviews/pending</li>
+            <li class="text-green-600">POST /api/reviews/:id/approve</li>
+            <li class="text-red-600">POST /api/reviews/:id/reject</li>
+          </ul>
+        </div>
+        <div>
+          <h3 class="font-bold text-green-600 mb-2">Employee</h3>
+          <ul class="space-y-1 text-sm font-mono">
+            <li class="text-blue-600">GET /api/my-tasks</li>
+            <li class="text-orange-600">PUT /api/my-tasks/:id/checklist</li>
+            <li class="text-green-600">POST /api/my-tasks/:id/evidence</li>
+            <li class="text-green-600">POST /api/my-tasks/:id/submit</li>
+          </ul>
+        </div>
+        <div>
+          <h3 class="font-bold text-gray-600 mb-2">Auth & Common</h3>
+          <ul class="space-y-1 text-sm font-mono">
+            <li class="text-green-600">POST /api/auth/login</li>
+            <li class="text-blue-600">GET /api/auth/me</li>
+            <li class="text-blue-600">GET /api/notifications</li>
+            <li class="text-green-600">POST /api/upload</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="text-center text-gray-600 py-8">
+      <p class="mb-2">ProManage WorkFlow 32 v3.0</p>
+      <p class="text-sm">Hệ thống quản lý công việc cho chuỗi cửa hàng</p>
+      <p class="text-sm mt-2">
+        <a href="/login" class="text-purple-600 hover:underline">Đăng nhập hệ thống</a> |
+        <a href="/" class="text-purple-600 hover:underline">Trang chủ</a>
+      </p>
+    </div>
+  </div>
+</body>
+</html>

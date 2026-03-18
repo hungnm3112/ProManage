@@ -5,7 +5,7 @@ exports.sendResponse = (res, data, statusCode = 200) => {
 exports.sendError = (res, message, statusCode = 400) => {
   res.status(statusCode).json({
     success: false,
-    error: message
+    message: message
   });
 };
 

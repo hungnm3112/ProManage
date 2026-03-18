@@ -33,7 +33,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const submitBtn = form.querySelector('button[type="submit"]');
       if (submitBtn) {
         submitBtn.disabled = true;
-        submitBtn.textContent = 'Loading...';
+        submitBtn.textContent = 'Đang xử lý...';
       }
     });
   });
@@ -86,7 +86,7 @@ const API = {
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.error || 'Something went wrong');
+      throw new Error(data.error || 'Có lỗi xảy ra');
     }
 
     return data;

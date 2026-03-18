@@ -1,0 +1,71 @@
+/* User Guide Styles */
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Code blocks */
+code {
+  font-family: 'Courier New', monospace;
+  font-size: 0.875rem;
+}
+
+/* Section anchors */
+[id] {
+  scroll-margin-top: 80px;
+}
+
+/* Lists */
+ol, ul {
+  line-height: 1.8;
+}
+
+/* Highlight current section */
+.section-highlight {
+  animation: highlight 0.5s ease-in-out;
+}
+
+@keyframes highlight {
+  0% {
+    background-color: transparent;
+  }
+  50% {
+    background-color: #fef3c7;
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+/* Print styles */
+@media print {
+  nav {
+    display: none;
+  }
+  
+  .bg-gradient-to-r {
+    background: white !important;
+    color: black !important;
+  }
+  
+  a {
+    color: black !important;
+    text-decoration: none !important;
+  }
+}
+
+/* Mobile responsive */
+@media (max-width: 640px) {
+  h2 {
+    font-size: 1.5rem;
+  }
+  
+  h3 {
+    font-size: 1.25rem;
+  }
+  
+  .text-4xl {
+    font-size: 2rem;
+  }
+}

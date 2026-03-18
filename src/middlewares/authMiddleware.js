@@ -40,10 +40,7 @@ exports.authenticate = async (req, res, next) => {
       // Verify token
       const decoded = verifyToken(token);
 
-      // Gán user info vào req
-      req.user = decoded;
-
-      // Optional: Verify employee vẫn còn active trong DB
+      // Verify employee vẫn còn active trong DB
       const employee = await Employee.findById(decoded.userId);
 
       if (!employee) {
@@ -53,6 +50,13 @@ exports.authenticate = async (req, res, next) => {
       if (employee.Status !== 'Đang hoạt động') {
         return sendError(res, 'Tài khoản đã ngừng hoạt động', 403);
       }
+
+      // Gán employee object vào req.user với role từ token
+      // Convert Mongoose document to plain object and add role
+      req.user = {
+        ...employee.toObject(),
+        role: decoded.role
+      };
 
       next();
     } catch (err) {
