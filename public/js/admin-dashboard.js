@@ -1,13 +1,26 @@
 // Admin Dashboard Logic
 
+// ==================== DEBUG CONFIGURATION ====================
+const DEBUG = true; // Set to true to enable debug logs
+
+// Override console.log to respect DEBUG flag (except errors)
+const originalLog = console.log;
+const originalError = console.error;
+
+if (!DEBUG) {
+  console.log = () => {}; // Disable all console.log when DEBUG = false
+  // Keep console.error for actual errors
+}
+
+const debugLog = (...args) => originalLog(...args); // Always use original for manual debugging
+const debugError = (...args) => originalError(...args);
+// =============================================================
+
 // Check authentication
 const token = localStorage.getItem('token');
 const employee = JSON.parse(localStorage.getItem('employee') || '{}');
 
 // Debug: Log authentication data
-console.log('[Admin Dashboard] Token:', token ? 'exists' : 'missing');
-console.log('[Admin Dashboard] Employee data:', employee);
-console.log('[Admin Dashboard] Employee role:', employee.role);
 
 if (!token) {
   console.error('[Admin Dashboard] No token found, redirecting to login');
@@ -35,14 +48,12 @@ document.getElementById('logoutBtn').addEventListener('click', logout);
 // Load dashboard data
 async function loadDashboard() {
   try {
-    console.log('[Admin Dashboard] Fetching dashboard data...');
     const response = await fetch('/api/dashboard/admin', {
       headers: {
         'Authorization': `Bearer ${token}`
       }
     });
 
-    console.log('[Admin Dashboard] Response status:', response.status);
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
@@ -52,8 +63,6 @@ async function loadDashboard() {
 
     const result = await response.json();
     const data = result.data;
-
-    console.log('[Admin Dashboard] Data received:', data);
 
     // Update NEW statistics - 4 main KPIs
     const overview = data.overview || data;
@@ -147,7 +156,6 @@ async function loadTaskList(status) {
   taskListTitle.textContent = titles[status] || 'Tasks cần ưu tiên';
   
   try {
-    console.log('[loadTaskList] 🔹 Fetching tasks with status:', status);
     const response = await fetch(`/api/dashboard/admin/tasks/${status}`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
@@ -156,19 +164,6 @@ async function loadTaskList(status) {
     
     const result = await response.json();
     const tasks = result.data || [];
-    
-    console.log('[loadTaskList] ✓ Tasks loaded, count:', tasks.length);
-    if (tasks.length > 0) {
-      console.log('[loadTaskList] 📋 First task structure:', {
-        _id: tasks[0]._id,
-        broadcastId: tasks[0].broadcastId,
-        storeTaskId: tasks[0].storeTaskId,
-        broadcastTitle: tasks[0].broadcastTitle,
-        hasChecklist: !!tasks[0].checklist,
-        hasRecurring: !!tasks[0].recurring,
-        hasDeadline: !!tasks[0].deadline
-      });
-    }
     
     if (tasks.length === 0) {
       taskListContainer.innerHTML = '<p class="text-center text-gray-500 py-8">Không có công việc nào</p>';
@@ -246,7 +241,7 @@ async function loadTaskList(status) {
         e.stopPropagation();
         const taskId = btn.getAttribute('data-task-id');
         const task = tasks.find(t => t._id === taskId);
-        if (task) handleDeleteTask(taskId, task);
+        if (task) handleDeleteTask(task);
       });
     });
     
@@ -363,6 +358,7 @@ let allEmployees = [];
 // NEW: Store assignments mapping { storeId: [employeeIds] }
 let storeAssignments = {};
 let currentSelectingStore = null; // Currently selecting employees for this store
+let storeEmployeesModalContext = 'assign'; // Track whether modal is opened from 'assign' or 'reassign' context
 let currentStoreEmployees = []; // All employees of current store
 let selectedStoreEmployees = []; // Selected employees for current store
 
@@ -429,29 +425,44 @@ closeTaskDetailsModal.addEventListener('click', () => {
 // Store Employees Modal event listeners
 closeStoreEmployeesModal.addEventListener('click', () => {
   storeEmployeesModal.classList.add('hidden');
+  storeEmployeesModalContext = 'assign'; // Reset context
   currentSelectingStore = null;
   selectedStoreEmployees = [];
 });
 
 cancelStoreEmployeesBtn.addEventListener('click', () => {
   storeEmployeesModal.classList.add('hidden');
+  storeEmployeesModalContext = 'assign'; // Reset context
   currentSelectingStore = null;
   selectedStoreEmployees = [];
 });
 
 confirmStoreEmployeesBtn.addEventListener('click', () => {
   if (currentSelectingStore && selectedStoreEmployees.length > 0) {
-    // Save employee selections for this store
-    storeAssignments[currentSelectingStore._id] = selectedStoreEmployees;
-    console.log('[confirmStoreEmployees] Store assignments:', storeAssignments);
-    
-    // Close modal
-    storeEmployeesModal.classList.add('hidden');
-    currentSelectingStore = null;
-    selectedStoreEmployees = [];
-    
-    // Re-render stores list to show selection
-    renderStores(allStores);
+    if (storeEmployeesModalContext === 'assign') {
+      // Assign context: save to storeAssignments
+      storeAssignments[currentSelectingStore._id] = selectedStoreEmployees;
+      
+      // Close modal and re-render stores list
+      storeEmployeesModal.classList.add('hidden');
+      currentSelectingStore = null;
+      selectedStoreEmployees = [];
+      renderStores(allStores);
+      
+    } else if (storeEmployeesModalContext === 'reassign') {
+      // Reassign context: save to selectedReassignTarget
+      selectedReassignTarget = {
+        type: 'both',
+        storeId: currentSelectingStore._id,
+        storeName: currentSelectingStore.Name,
+        employeeIds: selectedStoreEmployees
+      };     
+      
+      // Close modal - user is back in reassign modal
+      storeEmployeesModal.classList.add('hidden');
+      currentSelectingStore = null;
+      selectedStoreEmployees = [];
+    }
   } else {
     alert('Vui lòng chọn ít nhất 1 nhân viên');
   }
@@ -872,7 +883,6 @@ async function saveBroadcast(status = 'draft') {
       recurring: recurringData
     };
     
-    console.log('[Create Broadcast] Payload:', payload);
     
     // API call
     const response = await fetch('/api/broadcasts', {
@@ -884,17 +894,14 @@ async function saveBroadcast(status = 'draft') {
       body: JSON.stringify(payload)
     });
     
-    console.log('[Create Broadcast] Response status:', response.status);
     
     const result = await response.json();
-    console.log('[Create Broadcast] Response data:', result);
     
     if (!response.ok) {
       console.error('[Create Broadcast] Failed:', result);
       throw new Error(result.message || 'Không thể tạo công việc');
     }
     
-    console.log('[Create Broadcast] Success! Broadcast saved:', result.data);
     
     // Show success modal instead of auto-redirect
     const message = status === 'draft' ? 'Lưu nháp thành công!' : 'Công việc đã được tạo!';
@@ -1194,13 +1201,9 @@ function renderStores(stores) {
             }
           </div>
           <div class="flex-1 min-w-0">
-            <div class="flex items-center gap-2 mb-1">
+            <div class="flex items-center gap-2 mb-2">
               <i class="fas fa-store text-blue-600"></i>
               <p class="font-semibold text-gray-900 truncate">${store.Name}</p>
-            </div>
-            <div class="flex items-start gap-2 text-sm text-gray-600 mb-2">
-              <i class="fas fa-map-marker-alt text-gray-400 mt-0.5 flex-shrink-0"></i>
-              <p class="line-clamp-2">${store.Map_Address || store.Address || 'Không có địa chỉ'}</p>
             </div>
             ${isSelected 
               ? `<div class="flex items-center gap-2 text-sm">
@@ -1216,12 +1219,16 @@ function renderStores(stores) {
   }).join('');
   
   // Bind click events to store cards
-  document.querySelectorAll('.store-card').forEach(card => {
+  const storeCards = document.querySelectorAll('.store-card');
+  
+  storeCards.forEach(card => {
     card.addEventListener('click', async () => {
       const storeId = card.dataset.storeId;
       const store = allStores.find(s => s._id === storeId);
       if (store) {
         await openStoreEmployeesModal(store);
+      } else {
+        console.warn('[store-card click] Store not found:', storeId);
       }
     });
   });
@@ -1229,6 +1236,8 @@ function renderStores(stores) {
 
 // Open store employees selection modal
 async function openStoreEmployeesModal(store) {
+  
+  storeEmployeesModalContext = 'assign'; // Set context for assign modal
   currentSelectingStore = store;
   storeEmployeesStoreName.textContent = `Chi nhánh: ${store.Name}`;
   
@@ -1236,6 +1245,11 @@ async function openStoreEmployeesModal(store) {
   selectedStoreEmployees = storeAssignments[store._id] || [];
   
   // Show modal
+  if (!storeEmployeesModal) {
+    console.error('[openStoreEmployeesModal] Modal element not found!');
+    return;
+  }
+  
   storeEmployeesModal.classList.remove('hidden');
   
   // Load employees for this store
@@ -1275,7 +1289,6 @@ async function loadStoreEmployees(storeId, searchQuery = '') {
       return branchId === storeId;
     });
     
-    console.log(`[loadStoreEmployees] Found ${currentStoreEmployees.length} active employees for store ${storeId}`);
     
     renderStoreEmployees(currentStoreEmployees);
     
@@ -1513,7 +1526,6 @@ async function handleAssignBroadcast() {
       requestBody.employeeIds = selectedEmployees;
     }
     
-    console.log('[handleAssignBroadcast] Request body:', requestBody);
     
     const response = await fetch(`/api/broadcasts/${selectedBroadcastId}/assign`, {
       method: 'POST',
@@ -1530,7 +1542,6 @@ async function handleAssignBroadcast() {
     }
     
     const result = await response.json();
-    console.log('[handleAssignBroadcast] Success:', result);
     
     // Check if there are errors/warnings in the response
     if (result.data?.errors && result.data.errors.length > 0) {
@@ -1785,13 +1796,11 @@ editTaskType.addEventListener('change', (e) => {
 // Update deadline preview
 function updateEditDeadlinePreview() {
   const type = editTaskType.value;
-  console.log('[updateEditDeadlinePreview] Calculating deadline for type:', type);
   let deadline = null;
   
   if (type === 'onetime') {
     const date = editOnetimeDate.value;
     const time = editOnetimeTime.value || '00:00';
-    console.log('  ONETIME - Date:', date, 'Time:', time);
     
     if (date) {
       const [datePart, timePart] = [date, time];
@@ -1799,14 +1808,12 @@ function updateEditDeadlinePreview() {
     }
   } else if (type === 'daily') {
     const time = editDailyTime.value || '08:00';
-    console.log('  DAILY - Time:', time);
     const today = new Date();
     today.setHours(parseInt(time.split(':')[0]), parseInt(time.split(':')[1]), 0, 0);
     deadline = today;
   } else if (type === 'weekly') {
     const dayOfWeek = parseInt(editWeeklyDay.value);
     const time = editWeeklyTime.value || '08:00';
-    console.log('  WEEKLY - Day:', dayOfWeek, 'Time:', time);
     
     const today = new Date();
     let daysUntilTarget = (dayOfWeek - today.getDay() + 7) % 7;
@@ -1818,7 +1825,6 @@ function updateEditDeadlinePreview() {
   } else if (type === 'monthly') {
     const dayOfMonth = parseInt(editMonthlyDay.value) || 1;
     const time = editMonthlyTime.value || '08:00';
-    console.log('  MONTHLY - Day:', dayOfMonth, 'Time:', time);
     
     const today = new Date();
     let nextDate = new Date(today.getFullYear(), today.getMonth(), dayOfMonth);
@@ -1833,7 +1839,6 @@ function updateEditDeadlinePreview() {
     const month = (parseInt(editYearlyMonth.value) || 1) - 1; // Convert 1-based to 0-based
     const day = parseInt(editYearlyDay.value) || 1;
     const time = editYearlyTime.value || '08:00';
-    console.log('  YEARLY - Month (0-based):', month, 'Day:', day, 'Time:', time);
     
     const today = new Date();
     let nextDate = new Date(today.getFullYear(), month, day);
@@ -1849,9 +1854,7 @@ function updateEditDeadlinePreview() {
   if (deadline) {
     const previewText = deadline.toLocaleString('vi-VN');
     editDeadlinePreview.textContent = previewText;
-    console.log('[updateEditDeadlinePreview] ✓ Calculated deadline:', previewText);
   } else {
-    console.log('[updateEditDeadlinePreview] ⚠️  No deadline calculated (missing required fields)');
     editDeadlinePreview.textContent = 'Chưa đặt';
   }
 }
@@ -1870,29 +1873,15 @@ editYearlyTime.addEventListener('change', updateEditDeadlinePreview);
 
 // Open edit task details modal
 async function openEditTaskDetailsModal(task) {
-  console.log('[openEditTaskDetailsModal] ✅ Modal opened');
-  console.log('[openEditTaskDetailsModal] 📋 FULL task object received:', task);
   
   // Log all possible ID fields
-  console.log('[openEditTaskDetailsModal] 🔍 ID fields analysis:');
-  console.log('  - task._id:', task._id);
-  console.log('  - task.storeTaskId:', task.storeTaskId);
-  console.log('  - task.broadcastId:', task.broadcastId);
-  console.log('  - task.taskId:', task.taskId);
   
   // Log checklist and recurring
-  console.log('[openEditTaskDetailsModal] 📊 Data fields:');
-  console.log('  - Has checklist:', !!task.checklist, 'Length:', task.checklist?.length);
-  console.log('  - Has recurring:', !!task.recurring);
-  console.log('  - Has deadline:', !!task.deadline);
-  console.log('  - Recurring data:', task.recurring);
   
   // Determine which ID to use for API call
   const userTaskId = task.storeTaskId || task._id;
-  console.log('[openEditTaskDetailsModal] 🔹 Will use userTaskId for API:', userTaskId);
   
   // Fetch full task details from API
-  console.log('[openEditTaskDetailsModal] 🔹 Attempting to fetch full task details...');
   try {
     const taskId = task._id || task.storeTaskId;
     
@@ -1909,7 +1898,6 @@ async function openEditTaskDetailsModal(task) {
     
     // Try each endpoint
     for (const endpoint of endpointsToTry) {
-      console.log(`[openEditTaskDetailsModal] 📍 Trying: ${endpoint}`);
       try {
         const response = await fetch(endpoint, {
           headers: { 'Authorization': `Bearer ${token}` }
@@ -1939,55 +1927,40 @@ async function openEditTaskDetailsModal(task) {
                 status: storeTask.status,
                 completionRate: storeTask.completionRate
               };
-              console.log(`[openEditTaskDetailsModal] 🔄 Normalized storeTask response structure`);
             }
             
-            console.log(`[openEditTaskDetailsModal] ✓ SUCCESS with ${endpoint}`);
-            console.log('[openEditTaskDetailsModal] 📊 Response data:', {
-              hasChecklist: !!responseData.checklist && responseData.checklist.length > 0,
-              checklistLength: responseData.checklist?.length,
-              hasRecurring: !!responseData.recurring?.enabled,
-              recurring: responseData.recurring
-            });
             
             // Accept this endpoint's data (it returned 200 with normalized data)
             // Prefer endpoints that have checklist or recurring, but always use the first 200 as fallback
             if (responseData.checklist?.length > 0 || responseData.recurring?.enabled) {
               fullTaskData = responseData;
               successfulEndpoint = endpoint;
-              console.log(`[openEditTaskDetailsModal] 🎯 Found full data at: ${endpoint}`);
               break;
             } else if (!fullTaskData) {
               // Keep as candidate in case no better endpoint found
               fullTaskData = responseData;
               successfulEndpoint = endpoint;
-              console.log(`[openEditTaskDetailsModal] ℹ️  Saved as candidate (no checklist/recurring): ${endpoint}`);
             }
           }
         } else {
-          console.log(`[openEditTaskDetailsModal] ✗ ${endpoint} - Status: ${response.status}`);
         }
       } catch (error) {
-        console.log(`[openEditTaskDetailsModal] ✗ ${endpoint} - Error: ${error.message}`);
       }
     }
     
     if (fullTaskData) {
       task = fullTaskData;
-      console.log('[openEditTaskDetailsModal] ✓✓✓ Using full task data from API');
     } else {
-      console.log('[openEditTaskDetailsModal] ⚠️  No full data found from any endpoint, using summary data');
     }
   } catch (error) {
     console.error('[openEditTaskDetailsModal] ❌ Unexpected error while fetching:', error.message);
-    console.log('[openEditTaskDetailsModal] ℹ️  Using summary data from task list');
   }
   
   currentEditingTask = task;
   
   // Fill form with task data
-  console.log('[openEditTaskDetailsModal] 🔹 Gán giá trị cho form fields...');
   document.getElementById('editTaskDetailsId').value = task._id;
+  document.getElementById('editBroadcastId').value = task.broadcastId || '';
   
   // Try broadcastTitle first, then fallback to title
   const title = task.broadcastTitle || task.title || '';
@@ -1999,88 +1972,52 @@ async function openEditTaskDetailsModal(task) {
   
   document.getElementById('editDetailsPriority').value = task.priority || 'medium';
   
-  console.log('[openEditTaskDetailsModal] ✓ Form fields assigned:');
-  console.log('  - Title:', title);
-  console.log('  - Description:', description);
-  console.log('  - Priority:', task.priority || 'medium');
   
   // Determine task type from recurring data
   let taskType = 'onetime';
   currentEditingTaskRecurring = task.recurring || { enabled: false, frequency: 'onetime', pattern: {} };
   
-  console.log('[openEditTaskDetailsModal] 🔹 Analyzing recurring data...');
-  console.log('[openEditTaskDetailsModal] Task name:', task.broadcastTitle || task.title);
-  console.log('[openEditTaskDetailsModal] recurring.enabled:', currentEditingTaskRecurring.enabled);
-  console.log('[openEditTaskDetailsModal] recurring.frequency:', currentEditingTaskRecurring.frequency);
-  console.log('[openEditTaskDetailsModal] recurring.pattern:', JSON.stringify(currentEditingTaskRecurring.pattern));
   
   if (currentEditingTaskRecurring.enabled && currentEditingTaskRecurring.frequency) {
     taskType = currentEditingTaskRecurring.frequency;
-    console.log('[openEditTaskDetailsModal] ✓ Recurring task detected! Type:', taskType);
   } else {
-    console.log('[openEditTaskDetailsModal] ℹ️  No recurring data or disabled - treating as onetime');
   }
   
-  console.log('[openEditTaskDetailsModal] ✓ Task type được xác định:', taskType);
   
   // Set task type
   editTaskType.value = taskType;
-  console.log('[openEditTaskDetailsModal] ✓ editTaskType.value set to:', editTaskType.value);
   
   // Load deadline data based on task type
   const pattern = currentEditingTaskRecurring.pattern || {};
-  console.log('[openEditTaskDetailsModal] 🔹 Gán giá trị deadline dựa trên task type...');
   
   if (taskType === 'onetime' && task.deadline) {
     const deadline = new Date(task.deadline);
     editOnetimeDate.value = deadline.toISOString().split('T')[0];
     editOnetimeTime.value = deadline.toTimeString().slice(0, 5);
-    console.log('[openEditTaskDetailsModal] ✓ ONETIME deadline:');
-    console.log('  - Date:', editOnetimeDate.value);
-    console.log('  - Time:', editOnetimeTime.value);
   } else if (taskType === 'daily') {
     editDailyTime.value = pattern.time || '08:00';
-    console.log('[openEditTaskDetailsModal] ✓ DAILY deadline:');
-    console.log('  - Time:', editDailyTime.value);
   } else if (taskType === 'weekly') {
     editWeeklyDay.value = pattern.dayOfWeek || 1;
     editWeeklyTime.value = pattern.time || '08:00';
-    console.log('[openEditTaskDetailsModal] ✓ WEEKLY deadline:');
-    console.log('  - Day of week:', editWeeklyDay.value);
-    console.log('  - Time:', editWeeklyTime.value);
   } else if (taskType === 'monthly') {
     editMonthlyDay.value = pattern.dayOfMonth || 1;
     editMonthlyTime.value = pattern.time || '08:00';
-    console.log('[openEditTaskDetailsModal] ✓ MONTHLY deadline:');
-    console.log('  - Day of month:', editMonthlyDay.value);
-    console.log('  - Time:', editMonthlyTime.value);
   } else if (taskType === 'yearly') {
     editYearlyMonth.value = pattern.month || 1; // Broadcast model stores month as 1-12 (1-based)
     editYearlyDay.value = pattern.day || 1;
     editYearlyTime.value = pattern.time || '08:00';
-    console.log('[openEditTaskDetailsModal] ✓ YEARLY deadline:');
-    console.log('  - Month (1-based):', editYearlyMonth.value);
-    console.log('  - Day:', editYearlyDay.value);
-    console.log('  - Time:', editYearlyTime.value);
   }
   
   // Trigger task type change to show correct section
-  console.log('[openEditTaskDetailsModal] 🔹 Trigger task type change event...');
   editTaskType.dispatchEvent(new Event('change'));
-  console.log('[openEditTaskDetailsModal] ✓ Task type change event triggered');
   
   // Update preview with loaded data
-  console.log('[openEditTaskDetailsModal] 🔹 Cập nhập deadline preview...');
   updateEditDeadlinePreview();
-  console.log('[openEditTaskDetailsModal] ✓ Deadline preview updated: ' + editDeadlinePreview.textContent);
   
   // Load checklist
-  console.log('[openEditTaskDetailsModal] 🔹 Gán giá trị checklist...');
   editDetailsChecklistContainer.innerHTML = '';
   if (task.checklist && task.checklist.length > 0) {
-    console.log('[openEditTaskDetailsModal] ✓ Checklist items found:', task.checklist.length);
     task.checklist.forEach((item, index) => {
-      console.log(`  - Item ${index + 1}:`, item.task || item);
       const itemHtml = `
         <div class="flex gap-2 checklist-item-wrapper">
           <input type="text" class="checklist-item flex-1 px-3 sm:px-4 py-3 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-base min-h-[48px]" value="${item.task || item}" required>
@@ -2095,7 +2032,6 @@ async function openEditTaskDetailsModal(task) {
     });
   } else {
     // Add one empty item if no checklist
-    console.log('[openEditTaskDetailsModal] ℹ️  No checklist found, adding empty item');
     const itemHtml = `
       <div class="flex gap-2 checklist-item-wrapper">
         <input type="text" class="checklist-item flex-1 px-3 sm:px-4 py-3 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-base min-h-[48px]" placeholder="Nhập nội dung checklist..." required>
@@ -2118,8 +2054,6 @@ async function openEditTaskDetailsModal(task) {
   });
   
   // Show modal
-  console.log('[openEditTaskDetailsModal] 🎉 Modal is now visible');
-  console.log('[openEditTaskDetailsModal] ========================================');
   editTaskDetailsModal.classList.remove('hidden');
 }
 
@@ -2211,6 +2145,7 @@ function buildEditRecurringData(taskType) {
 saveEditDetailsBtn.addEventListener('click', async () => {
   try {
     const taskId = document.getElementById('editTaskDetailsId').value;
+    const broadcastId = document.getElementById('editBroadcastId').value;
     const title = document.getElementById('editDetailsTitle').value.trim();
     const description = document.getElementById('editDetailsDescription').value.trim();
     const priority = document.getElementById('editDetailsPriority').value;
@@ -2260,9 +2195,10 @@ saveEditDetailsBtn.addEventListener('click', async () => {
       recurring: recurringData
     };
     
-    console.log('[saveEditTaskDetails] Sending request:', requestBody);
+    // Use broadcastId to update the Broadcast document; fallback to storeTask id
+    const updateId = broadcastId || taskId;
     
-    const response = await fetch(`/api/broadcasts/user-tasks/${taskId}`, {
+    const response = await fetch(`/api/broadcasts/${updateId}`, {
       method: 'PUT',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -2277,7 +2213,6 @@ saveEditDetailsBtn.addEventListener('click', async () => {
     }
     
     const result = await response.json();
-    console.log('[saveEditTaskDetails] Success:', result);
     
     successMessage.textContent = 'Đã cập nhật chi tiết công việc thành công!';
     successModal.classList.remove('hidden');
@@ -2345,104 +2280,36 @@ cancelEditReassignBtn.addEventListener('click', () => {
   selectedReassignTarget = null;
 });
 
-// Store search and select
-reassignStoreSearch.addEventListener('input', async (e) => {
+// Store search with debounce (reuses loadReassignStores)
+let reassignStoreSearchTimer = null;
+reassignStoreSearch.addEventListener('input', (e) => {
   const searchTerm = e.target.value.trim();
   
-  if (!searchTerm) {
-    reassignStoresList.innerHTML = '<p class="text-center text-gray-500 py-8">Nhập để tìm kiếm chi nhánh</p>';
-    return;
+  // Clear previous timer
+  if (reassignStoreSearchTimer) {
+    clearTimeout(reassignStoreSearchTimer);
   }
   
-  try {
-    const response = await fetch(`/api/stores?search=${encodeURIComponent(searchTerm)}`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    
-    if (!response.ok) throw new Error('Lỗi khi tải danh sách chi nhánh');
-    
-    const result = await response.json();
-    const stores = result.data || [];
-    
-    if (stores.length === 0) {
-      reassignStoresList.innerHTML = '<p class="text-center text-gray-500 py-4">Không tìm thấy chi nhánh nào</p>';
-      return;
-    }
-    
-    reassignStoresList.innerHTML = stores.map(store => `
-      <div class="reassign-store-item p-4 border border-gray-200 rounded-lg hover:bg-blue-50 cursor-pointer transition" data-store-id="${store._id}" data-store-name="${store.Name}">
-        <p class="font-semibold text-gray-900">${store.Name}</p>
-        <p class="text-sm text-gray-600">${store.Address || 'N/A'}</p>
-      </div>
-    `).join('');
-    
-    // Attach click handlers
-    document.querySelectorAll('.reassign-store-item').forEach(item => {
-      item.addEventListener('click', () => {
-        document.querySelectorAll('.reassign-store-item').forEach(i => i.classList.remove('bg-blue-50', 'border-blue-600'));
-        item.classList.add('bg-blue-50', 'border-blue-600');
-        selectedReassignTarget = {
-          type: 'store',
-          id: item.getAttribute('data-store-id'),
-          name: item.getAttribute('data-store-name')
-        };
-      });
-    });
-    
-  } catch (error) {
-    console.error('Error searching stores:', error);
-    reassignStoresList.innerHTML = '<p class="text-center text-red-500 py-4">Lỗi khi tìm kiếm</p>';
-  }
+  // Debounce: wait 300ms after user stops typing
+  reassignStoreSearchTimer = setTimeout(() => {
+    loadReassignStores(searchTerm);
+  }, 300);
 });
 
-// Employee search and select
-reassignEmployeeSearch.addEventListener('input', async (e) => {
+// Employee search with debounce (reuses loadReassignEmployees)
+let reassignEmployeeSearchTimer = null;
+reassignEmployeeSearch.addEventListener('input', (e) => {
   const searchTerm = e.target.value.trim();
   
-  if (!searchTerm) {
-    reassignEmployeesList.innerHTML = '<p class="text-center text-gray-500 py-8">Nhập để tìm kiếm nhân viên</p>';
-    return;
+  // Clear previous timer
+  if (reassignEmployeeSearchTimer) {
+    clearTimeout(reassignEmployeeSearchTimer);
   }
   
-  try {
-    const response = await fetch(`/api/employees/search?q=${encodeURIComponent(searchTerm)}`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    
-    if (!response.ok) throw new Error('Lỗi khi tải danh sách nhân viên');
-    
-    const result = await response.json();
-    const employees = result.data?.filter(emp => emp.Status === 'Đang hoạt động') || [];
-    
-    if (employees.length === 0) {
-      reassignEmployeesList.innerHTML = '<p class="text-center text-gray-500 py-4">Không tìm thấy nhân viên nào</p>';
-      return;
-    }
-    
-    reassignEmployeesList.innerHTML = employees.map(emp => `
-      <div class="reassign-employee-item p-4 border border-gray-200 rounded-lg hover:bg-blue-50 cursor-pointer transition" data-employee-id="${emp._id}" data-employee-name="${emp.FullName}">
-        <p class="font-semibold text-gray-900">${emp.FullName}</p>
-        <p class="text-sm text-gray-600">${emp.Email || 'N/A'} - ${emp.ID_Branch?.Name || 'N/A'}</p>
-      </div>
-    `).join('');
-    
-    // Attach click handlers
-    document.querySelectorAll('.reassign-employee-item').forEach(item => {
-      item.addEventListener('click', () => {
-        document.querySelectorAll('.reassign-employee-item').forEach(i => i.classList.remove('bg-blue-50', 'border-blue-600'));
-        item.classList.add('bg-blue-50', 'border-blue-600');
-        selectedReassignTarget = {
-          type: 'employee',
-          id: item.getAttribute('data-employee-id'),
-          name: item.getAttribute('data-employee-name')
-        };
-      });
-    });
-    
-  } catch (error) {
-    console.error('Error searching employees:', error);
-    reassignEmployeesList.innerHTML = '<p class="text-center text-red-500 py-4">Lỗi khi tìm kiếm</p>';
-  }
+  // Debounce: wait 300ms after user stops typing
+  reassignEmployeeSearchTimer = setTimeout(() => {
+    loadReassignEmployees(searchTerm);
+  }, 300);
 });
 
 // Open edit task reassign modal
@@ -2452,22 +2319,207 @@ async function openEditTaskReassignModal(task) {
   
   document.getElementById('reassignTaskTitle').textContent = task.broadcastTitle || task.title || '';
   
-  // Reset search and tabs
+  // Reset search
   reassignStoreSearch.value = '';
   reassignEmployeeSearch.value = '';
-  reassignStoresList.innerHTML = '<p class="text-center text-gray-500 py-8">Tìm kiếm chi nhánh để giao lại</p>';
-  reassignEmployeesList.innerHTML = '<p class="text-center text-gray-500 py-8">Tìm kiếm nhân viên để giao lại</p>';
   
   // Show store tab by default
   reassignStoresTab.click();
   
   editTaskReassignModal.classList.remove('hidden');
+  
+  // Load full lists just like assignModal (reuse same functions)
+  await Promise.all([
+    loadReassignStores(),
+    loadReassignEmployees()
+  ]);
+}
+
+// Load stores for reassignment (reuses loadStores logic but renders for single selection)
+async function loadReassignStores(searchQuery = '') {
+  reassignStoresList.innerHTML = '<p class="text-center text-gray-500 py-8">Đang tải...</p>';
+  
+  try {
+    const params = new URLSearchParams({
+      limit: '100',
+      page: '1'
+    });
+    
+    if (searchQuery) {
+      params.set('search', searchQuery);
+    }
+    
+    const response = await fetch(`/api/brands?${params.toString()}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    
+    if (!response.ok) throw new Error('Không thể tải danh sách chi nhánh');
+    
+    const result = await response.json();
+    const stores = result.data?.brands || result.brands || [];
+    
+    // Save to global allStores for later use when clicking on store
+    allStores = stores;
+    
+    if (stores.length === 0) {
+      reassignStoresList.innerHTML = '<p class="text-center text-gray-500 py-8">Không có chi nhánh nào</p>';
+      return;
+    }
+    
+    // Render stores with radio selection mode (single choice)
+    reassignStoresList.innerHTML = stores.map(store => `
+      <div class="reassign-store-item p-4 border border-gray-200 rounded-lg hover:bg-blue-50 hover:border-blue-400 cursor-pointer transition-all" 
+           data-store-id="${store._id}" 
+           data-store-name="${store.Name}">
+        <div class="flex items-start gap-3">
+          <div class="flex-shrink-0 mt-1">
+            <i class="far fa-circle text-gray-400 text-xl"></i>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2">
+              <i class="fas fa-store text-blue-600"></i>
+              <p class="font-semibold text-gray-900">${store.Name}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    `).join('');
+    
+    // Attach click handlers for single selection
+    document.querySelectorAll('.reassign-store-item').forEach(item => {
+      item.addEventListener('click', async () => {
+        const storeId = item.getAttribute('data-store-id');
+        const storeName = item.getAttribute('data-store-name');
+        
+        // Find store object
+        const store = allStores.find(s => s._id === storeId);
+        
+        if (store) {
+          // Open employee selection modal (same as assign modal logic)
+          storeEmployeesModalContext = 'reassign'; // Track context
+          currentSelectingStore = store;
+          storeEmployeesStoreName.textContent = `Chi nhánh: ${store.Name}`;
+          selectedStoreEmployees = [];
+          
+          if (!storeEmployeesModal) {
+            console.error('❌ Modal element not found!');
+            return;
+          }
+          
+          storeEmployeesModal.classList.remove('hidden');
+          await loadStoreEmployees(store._id);
+        }
+      });
+    });
+    
+  } catch (error) {
+    console.error('Error loading reassign stores:', error);
+    reassignStoresList.innerHTML = '<p class="text-center text-red-500 py-8">Lỗi khi tải dữ liệu</p>';
+  }
+}
+
+// Load employees for reassignment (reuses loadEmployees logic but renders for single selection)
+async function loadReassignEmployees(searchQuery = '') {
+  reassignEmployeesList.innerHTML = '<p class="text-center text-gray-500 py-8">Đang tải...</p>';
+  
+  try {
+    const params = new URLSearchParams({
+      limit: '800',
+      page: '1',
+      status: 'Đang hoạt động'
+    });
+    
+    if (searchQuery) {
+      params.set('search', searchQuery);
+    }
+    
+    const response = await fetch(`/api/employees?${params.toString()}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    
+    if (!response.ok) throw new Error('Không thể tải danh sách nhân viên');
+    
+    const result = await response.json();
+    const employees = result.data || result.employees || [];
+    
+    if (employees.length === 0) {
+      reassignEmployeesList.innerHTML = '<p class="text-center text-gray-500 py-8">Không có nhân viên nào</p>';
+      return;
+    }
+    
+    // Render employees with radio selection mode (single choice)
+    reassignEmployeesList.innerHTML = employees.map(emp => `
+      <div class="reassign-employee-item p-4 border border-gray-200 rounded-lg hover:bg-blue-50 hover:border-blue-400 cursor-pointer transition-all" 
+           data-employee-id="${emp._id}" 
+           data-employee-name="${emp.FullName}">
+        <div class="flex items-start gap-3">
+          <div class="flex-shrink-0 mt-1">
+            <i class="far fa-circle text-gray-400 text-xl"></i>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 mb-2">
+              <i class="fas fa-user-circle text-blue-600 text-lg"></i>
+              <p class="font-semibold text-gray-900">${emp.FullName}</p>
+            </div>
+            <div class="space-y-1.5 text-sm">
+              <div class="flex items-center gap-2 text-gray-600">
+                <i class="fas fa-phone text-green-500 w-4"></i>
+                <span>${emp.Phone}</span>
+                <span class="text-gray-400">•</span>
+                <i class="fas fa-briefcase text-purple-500 w-4"></i>
+                <span>${emp.ID_GroupUser?.Name || 'Chưa xác định'}</span>
+              </div>
+              <div class="flex items-center gap-2 text-gray-600">
+                <i class="fas fa-building text-orange-500 w-4"></i>
+                <span>${emp.ID_Branch?.Name || 'Chưa có chi nhánh'}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `).join('');
+    
+    // Attach click handlers for single selection
+    document.querySelectorAll('.reassign-employee-item').forEach(item => {
+      item.addEventListener('click', () => {
+        // Deselect all
+        document.querySelectorAll('.reassign-employee-item').forEach(i => {
+          i.classList.remove('bg-blue-50', 'border-blue-600');
+          i.querySelector('i.fa-circle').classList.remove('fa-check-circle', 'fas', 'text-blue-600');
+          i.querySelector('i.fa-circle').classList.add('far', 'text-gray-400');
+        });
+        
+        // Select this one
+        item.classList.add('bg-blue-50', 'border-blue-600');
+        const icon = item.querySelector('i.fa-circle');
+        icon.classList.remove('far', 'text-gray-400');
+        icon.classList.add('fas', 'fa-check-circle', 'text-blue-600');
+        
+        selectedReassignTarget = {
+          type: 'employee',
+          id: item.getAttribute('data-employee-id'),
+          name: item.getAttribute('data-employee-name')
+        };
+      });
+    });
+    
+  } catch (error) {
+    console.error('Error loading reassign employees:', error);
+    reassignEmployeesList.innerHTML = '<p class="text-center text-red-500 py-8">Lỗi khi tải dữ liệu</p>';
+  }
 }
 
 // Confirm reassign
 confirmEditReassignBtn.addEventListener('click', async () => {
   if (!selectedReassignTarget) {
     errorMessage.textContent = 'Vui lòng chọn ' + (reassignStoresContent.classList.contains('hidden') ? 'nhân viên' : 'chi nhánh');
+    errorModal.classList.remove('hidden');
+    return;
+  }
+  
+  // Check if task has userTaskId
+  if (!currentEditingTask.userTaskId) {
+    errorMessage.textContent = 'Không thể giao lại task chưa được giao cho nhân viên';
     errorModal.classList.remove('hidden');
     return;
   }
@@ -2479,13 +2531,17 @@ confirmEditReassignBtn.addEventListener('click', async () => {
     const requestBody = {};
     if (selectedReassignTarget.type === 'store') {
       requestBody.storeId = selectedReassignTarget.id;
+    } else if (selectedReassignTarget.type === 'both') {
+      // When selecting store with employees
+      if (selectedReassignTarget.employeeIds && selectedReassignTarget.employeeIds.length > 0) {
+        requestBody.employeeId = selectedReassignTarget.employeeIds[0];
+      }
     } else {
       requestBody.employeeId = selectedReassignTarget.id;
     }
     
-    console.log('[reassignTask] Sending request:', requestBody);
     
-    const response = await fetch(`/api/broadcasts/user-tasks/${currentEditingTask._id}`, {
+    const response = await fetch(`/api/broadcasts/user-tasks/${currentEditingTask.userTaskId}`, {
       method: 'PUT',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -2524,9 +2580,16 @@ confirmEditReassignBtn.addEventListener('click', async () => {
   }
 });
 
-// ==================== DELETE TASK FUNCTION (UNCHANGED) ====================
+// ==================== DELETE TASK FUNCTION ====================
 
-async function handleDeleteTask(taskId, task) {
+async function handleDeleteTask(task) {
+  // Check if task has been assigned to employee
+  if (!task.userTaskId) {
+    errorMessage.textContent = 'Không thể xóa task chưa được giao cho nhân viên. Vui lòng xóa broadcast gốc.';
+    errorModal.classList.remove('hidden');
+    return;
+  }
+
   const confirmMsg = `Bạn có chắc chắn muốn xóa task "${task.broadcastTitle || task.title}" của nhân viên ${task.employeeName || 'N/A'}?\n\nLưu ý: Không thể xóa task đã hoàn thành.`;
   
   if (!confirm(confirmMsg)) {
@@ -2534,7 +2597,7 @@ async function handleDeleteTask(taskId, task) {
   }
   
   try {
-    const response = await fetch(`/api/broadcasts/user-tasks/${taskId}`, {
+    const response = await fetch(`/api/broadcasts/user-tasks/${task.userTaskId}`, {
       method: 'DELETE',
       headers: {
         'Authorization': `Bearer ${token}`
@@ -2547,7 +2610,6 @@ async function handleDeleteTask(taskId, task) {
     }
     
     const result = await response.json();
-    console.log('[deleteTask] Success:', result);
     
     successMessage.textContent = 'Đã xóa task thành công!';
     successModal.classList.remove('hidden');

@@ -70,7 +70,12 @@ app.use(helmet({
 })); // Security headers with CSP config
 app.use(cors()); // Enable CORS
 app.use(compression()); // Compress responses
-app.use(morgan('combined', { stream: logger.stream })); // HTTP request logger
+
+// HTTP request logger - DISABLED for cleaner console output
+// Uncomment below to enable HTTP logging:
+// app.use(morgan('dev')); // Simple format
+// app.use(morgan('combined', { stream: logger.stream })); // Detailed format with file logging
+
 app.use(express.json()); // Parse JSON bodies
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
 app.use(cookieParser()); // Parse cookies

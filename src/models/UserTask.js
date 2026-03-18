@@ -27,7 +27,7 @@ const userTaskSchema = new mongoose.Schema({
   // Assigned employee
   employeeId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Nhan_vien', // Employee collection
+    ref: 'Employee', // Employee model
     required: true,
     index: true
   },

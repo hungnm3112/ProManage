@@ -11,9 +11,14 @@ class AccountSwitcher {
   }
 
   async init() {
-    // Only show in development
-    if (window.location.hostname !== 'localhost' && !window.location.hostname.startsWith('192.168')) {
-      return;
+    // Only show for admin users
+    try {
+      const employee = JSON.parse(localStorage.getItem('employee') || '{}');
+      if (employee.role !== 'admin') {
+        return; // Not an admin, don't show button
+      }
+    } catch (error) {
+      return; // Error parsing employee data, don't show button
     }
 
     await this.loadAccounts();
@@ -52,7 +57,7 @@ class AccountSwitcher {
     modal.innerHTML = `
       <div class="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[80vh] overflow-hidden">
         <div class="bg-indigo-600 text-white p-4 flex justify-between items-center">
-          <h3 class="text-lg font-bold">🔄 Quick Switch Account (Dev Tool)</h3>
+          <h3 class="text-lg font-bold">🔄 Chuyển đổi tài khoản (Dev Tool)</h3>
           <button id="closeAccountSwitcher" class="text-white hover:text-gray-200">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>

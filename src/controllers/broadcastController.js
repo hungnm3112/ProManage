@@ -199,10 +199,14 @@ const updateBroadcast = async (req, res) => {
       return sendError(res, 'Broadcast not found', 404);
     }
     
-    // Check if can edit
-    const canEditResult = broadcast.canEdit();
-    if (!canEditResult.canEdit) {
-      return sendError(res, canEditResult.reason, 400);
+    // Admin can always edit; non-admin can only edit drafts
+    const currentUser = req.user;
+    const userRole = await getEmployeeRole(currentUser);
+    if (userRole !== 'admin') {
+      const canEditResult = broadcast.canEdit();
+      if (!canEditResult.canEdit) {
+        return sendError(res, canEditResult.reason, 400);
+      }
     }
     
     // Allowed update fields
@@ -803,10 +807,12 @@ const updateUserTask = async (req, res) => {
         return sendError(res, `Nhân viên ${newEmployee.FullName} đã có task này rồi`, 400);
       }
       
+      // Save old employee reference before updating
+      const oldEmployee = userTask.employeeId;
       userTask.employeeId = updates.employeeId;
       
       // Update StoreTask if employee is from different branch
-      if (newEmployee.ID_Branch.toString() !== userTask.employeeId.ID_Branch.toString()) {
+      if (newEmployee.ID_Branch.toString() !== oldEmployee.ID_Branch.toString()) {
         const StoreTask = require('../models/StoreTask');
         
         // Find or create StoreTask for new branch
@@ -854,7 +860,7 @@ const updateUserTask = async (req, res) => {
         const oldStoreTask = await StoreTask.findById(userTask.storeTaskId);
         if (oldStoreTask) {
           oldStoreTask.assignedEmployees = oldStoreTask.assignedEmployees.filter(
-            id => id.toString() !== userTask.employeeId._id.toString()
+            id => id.toString() !== oldEmployee._id.toString()
           );
           await oldStoreTask.save();
         }
