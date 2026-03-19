@@ -1,8 +1,326 @@
-# Audit: API Endpoints
+# API Reference - ProManage
 
-**Date:** March 19, 2026  
-**Audited by:** AI Assistant  
-**Purpose:** Complete inventory of all API endpoints
+**Last Updated:** March 19, 2026  
+**Version:** 2.0  
+**Purpose:** Complete API documentation với examples, validation rules, và critical warnings
+
+---
+
+## 🚨 CRITICAL RULES - ĐỌC TRƯỚC KHI CODE
+
+### ⛔ Rule 1: READ-ONLY Collections (KHÔNG BAO GIỜ được vi phạm)
+
+**3 Collections TUYỆT ĐỐI READ-ONLY:**
+- `Employee` - Synced từ HR system
+- `Brand` (Branch) - Synced từ ERP system  
+- `GroupUser` - Synced từ Permission system
+
+**Bị CẤM:**
+- ❌ `POST` - Create operations
+- ❌ `PUT/PATCH` - Update operations
+- ❌ `DELETE` - Delete operations
+
+**Chỉ được phép:**
+- ✅ `GET` - Read operations only
+- ✅ Reference bằng ObjectId trong collections khác
+
+**Tại sao:** Dữ liệu được manage bởi external systems. ProManage chỉ đọc để reference.
+
+**Nếu vi phạm:** Data inconsistency, sync conflicts, system corruption
+
+---
+
+### 🔑 Rule 2: Phân biệt userTaskId vs storeTaskId (Bug #2, #3 - FIXED 18/03/2026)
+
+**userTaskId:**
+- ID của **UserTask document** (task assigned to 1 employee)
+- Dùng cho: `/api/broadcasts/user-tasks/:taskId` (reassign, delete)
+- Dùng cho: `/api/my-tasks/:id` (employee operations)
+- Dùng cho: `/api/reviews/:taskId` (review, approve, reject)
+
+**storeTaskId:**
+- ID của **StoreTask document** (task for 1 store/branch)
+- Dùng cho: `/api/store-tasks/:id` (manager operations)
+- Dùng cho: Reference trong UserTask.storeTaskId field
+
+**KHÔNG BAO GIỜ:**
+- ❌ Dùng storeTaskId cho reassign/delete operations
+- ❌ Dùng userTaskId cho store-level operations
+
+**Bug đã fix (18/03):**
+- Admin reassign/delete trước đây dùng nhầm storeTaskId → 404 errors
+- Đã fix thành dùng userTaskId → works correctly
+
+**Nếu vi phạm:** 404 Not Found, xóa sai task, reassign sai employee
+
+---
+
+### 📎 Rule 3: Model References - Dùng 'Employee' (không phải 'Nhan_vien')
+
+**Trong Mongoose Models:**
+- ✅ Đúng: `ref: 'Employee'` 
+- ❌ SAI: `ref: 'Nhan_vien'`
+
+**Tại sao:**
+- Collection name trong DB: `Employee` (không có dấu gạch dưới)
+- Mongoose model name: `Employee`
+- Nếu dùng sai ref → Populate fails
+
+**Ví dụ đúng:**
+```javascript
+// UserTask model
+employeeId: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: 'Employee',  // ✅ ĐÚNG
+  required: true
+}
+
+// Notification model  
+userId: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: 'Employee',  // ✅ ĐÚNG
+  required: true
+}
+```
+
+**Ví dụ SAI:**
+```javascript
+employeeId: {
+  ref: 'Nhan_vien'  // ❌ SAI - populate sẽ fail
+}
+```
+
+**Nếu vi phạm:** Populate returns null, relationship broken, data not loaded
+
+---
+
+### ⚠️ Rule 4: Required Checklist Validation (Business Rule)
+
+**Submit UserTask:**
+- **TẤT CẢ** checklist items có `required: true` PHẢI `completed: true`
+- Validation này là **NGHIÊM NGẶT**, không bypass được
+- Frontend PHẢI validate trước khi submit
+
+**Nếu vi phạm:** 400 Bad Request, manager reject task, employee phải làm lại
+
+---
+
+### 🔄 Rule 5: Status Transitions (Accept ≠ In Progress)
+
+**StoreTask Status Flow:**
+1. `pending` → Manager nhận task
+2. `accepted` → Manager accept (NOT in_progress yet!)
+3. `in_progress` → Manager assign employees (UserTasks created)
+4. `completed` → All UserTasks done
+
+**Common Mistake:** Accept ≠ In Progress!
+- Accept chỉ là manager đồng ý làm
+- In Progress là khi có employees được assigned
+
+**Nếu vi phạm:** UI hiển thị sai, logic flow broken, notifications sai
+
+---
+
+### 🔢 Rule 6: Data Type Constraints (Legacy Database Issues)
+
+**Vấn đề:** Database cũ có nhiều kiểu dữ liệu không chuẩn
+
+**Boolean as String:**
+- ❌ `Active: "true"/"false"` (Brand model)
+- ❌ `Active_Schedule: "true"/"false"` (Brand model)
+- ❌ `is_timekeeping_all: "true"/"false"` (Employee model)
+- ✅ **Phải parse:** `JSON.parse(value)` hoặc `value === "true"`
+
+**Number as String:**
+- ❌ `Salary: "5000000"` (Employee model) - String, không phải Number
+- ❌ `Allowance: "500000"` - String
+- ✅ **Phải parse:** `parseInt(value)` hoặc `parseFloat(value)` trước khi tính toán
+
+**Status Inconsistency:**
+- Collection `GroupUser`: `Trang_thai: 1` hoặc `0` (Number)
+- Collection `Brand`: `Active: "true"/"false"` (String)
+- Collection `Broadcast/UserTask`: `status: 'draft'/'published'` (String enum)
+- ✅ **Phải check từng collection** để biết format đúng
+
+**Khi code:**
+```javascript
+// ❌ SAI - Assume boolean
+if (employee.is_timekeeping_all) { ... }
+
+// ✅ ĐÚNG - Parse string to boolean
+if (employee.is_timekeeping_all === "true") { ... }
+
+// ❌ SAI - Tính toán trực tiếp
+const total = employee.Salary + employee.Allowance;  // "5000000" + "500000" = "5000000500000" (string concat!)
+
+// ✅ ĐÚNG - Parse trước
+const total = parseInt(employee.Salary) + parseInt(employee.Allowance);  // 5500000
+```
+
+**API Response Behavior:**
+- GET /api/employees/:id sẽ trả về đúng kiểu dữ liệu từ DB (string)
+- Frontend PHẢI parse khi cần tính toán hoặc logic checks
+- Backend validators hiện chưa normalize data types (Technical Debt)
+
+---
+
+### 🔐 Rule 7: Authorization Matrix (Chi tiết phân quyền)
+
+| Endpoint Category | Admin | Manager | Employee |
+|-------------------|-------|---------|----------|
+| **Auth** | ✅ All | ✅ All | ✅ All |
+| **Broadcasts** | ✅ Full CRUD | ❌ None | ❌ None |
+| **StoreTasks** | ✅ View All | ✅ Own Store Only | ❌ None |
+| **UserTasks (My Tasks)** | ✅ View All + Reassign/Delete | ❌ None | ✅ Own Tasks Only |
+| **Reviews** | ✅ View All | ✅ Own Store Employees Only | ❌ None |
+| **Dashboard** | ✅ System Stats | ✅ Store Stats | ✅ Personal Stats |
+| **Employees** | ✅ Read All | ✅ Read All | ✅ Read All |
+| **Brands** | ✅ Read All | ✅ Read All | ✅ Read All |
+| **Notifications** | ✅ Own | ✅ Own | ✅ Own |
+| **Uploads** | ✅ All | ✅ All | ✅ All |
+
+**Manager Restrictions (CRITICAL):**
+- Manager chỉ thao tác với **StoreTask có storeId = Manager's ID_Branch**
+- Check: `employee.ID_Branch._id === storeTask.storeId`
+- Manager chỉ review **UserTask của employees thuộc store mình**
+- Check: `userTask.employeeId.ID_Branch === manager.ID_Branch`
+
+**Employee Restrictions (CRITICAL):**
+- Employee chỉ xem/update **UserTask có employeeId = req.user._id**
+- Check: `userTask.employeeId.toString() === req.user._id.toString()`
+- Không được xem tasks của người khác (403 Forbidden)
+
+**Implementation:**
+```javascript
+// Manager authorization example
+if (req.user.role === 'manager') {
+  const storeTask = await StoreTask.findById(id).populate('storeId');
+  const manager = await Employee.findById(req.user._id).populate('ID_Branch');
+  
+  if (storeTask.storeId._id.toString() !== manager.ID_Branch._id.toString()) {
+    return res.status(403).json({ message: 'Not your store' });
+  }
+}
+
+// Employee authorization example
+if (req.user.role === 'employee') {
+  const userTask = await UserTask.findById(id);
+  
+  if (userTask.employeeId.toString() !== req.user._id.toString()) {
+    return res.status(403).json({ message: 'Not your task' });
+  }
+}
+```
+
+---
+
+### ⚠️ Rule 8: Technical Debt & Security Warnings
+
+**🚨 MISSING FEATURES - Cần implement:**
+
+**1. XSS Sanitization (CRITICAL - Known Issue #7):**
+- ❌ Hiện chưa có sanitization cho user inputs
+- Risk fields: `title`, `description`, `reviewNote`, `reason`, `checklist.title`
+- **Attack vector:** `<script>alert('XSS')</script>` trong title → Execute khi render
+- **Workaround:** Frontend phải escape HTML khi display
+- **Fix needed:** Implement `sanitize-html` library ở backend validators
+- **Priority:** MEDIUM (có workaround)
+
+**2. Rate Limiting (CRITICAL - Known Issue #8):**
+- ❌ Không có rate limiting cho bất kỳ endpoint nào
+- Vulnerable endpoints:
+  - `POST /api/auth/login` - Brute force attacks
+  - `POST /api/upload/*` - Server overload
+  - `POST /api/broadcasts/:id/assign` - Spam assignments
+- **Attack vector:** 1000 req/sec → Server crash
+- **Workaround:** Cloudflare rate limiting (nếu có)
+- **Fix needed:** Implement `express-rate-limit` middleware
+- **Priority:** HIGH (no workaround)
+
+**3. JWT Refresh Token (Known Issue #9):**
+- ❌ Chỉ có Access Token (24h expiry)
+- ❌ Không có Refresh Token mechanism
+- **Security issue:** Không thu hồi token được nếu bị rò rỉ
+- **Current behavior:** 
+  - User login → Token expires after 24h
+  - Phải login lại để get token mới
+  - Không logout được từ server-side
+- **Workaround:** Client-side logout (delete token)
+- **Fix needed:** Implement refresh token flow
+- **Priority:** LOW (acceptable for internal system)
+
+**4. Validators Không Nhất Quán (Known Issue #11):**
+- ❌ Một số endpoints thiếu validators
+- ❌ Validation rules không consistent
+- **Examples:**
+  - `POST /api/broadcasts` - Full validators ✅
+  - `PUT /api/broadcasts/:id/publish` - Minimal validators ⚠️
+  - Some endpoints dùng Joi, some dùng manual checks
+- **Impact:** Inconsistent error messages, data quality issues
+- **Priority:** MEDIUM
+
+**5. Thiếu Database Indexes (Known Issue #10):**
+- ❌ Queries chậm với large datasets
+- Missing indexes:
+  - `UserTask.employeeId` - Frequent queries
+  - `Notification.userId + isRead` - Dashboard queries
+  - `Broadcast.status + deadline` - Admin filtering
+- **Impact:** Slow queries (>500ms với 10k+ records)
+- **Priority:** MEDIUM (optimize later)
+
+**6. Thiếu Unit Tests (Known Issue #13):**
+- ❌ 0% test coverage
+- ❌ Không có integration tests
+- **Risk:** Regressions khi refactor
+- **Priority:** HIGH (long-term stability)
+
+**Khi document API:**
+- Ghi chú rõ endpoints nào vulnerable
+- Warning về missing sanitization/rate limiting
+- Khuyến nghị frontend implement mitigations
+
+---
+
+### 🔄 Rule 9: Auto Behaviors & Side Effects
+
+**Auto Status Transitions:**
+
+**UserTask Status Auto-Change:**
+1. **assigned → in_progress:**
+   - Trigger: Lần đầu update checklist HOẶC upload evidence đầu tiên
+   - Code: `if (status === 'assigned') { status = 'in_progress' }`
+   - Impact: Employee không cần manually "start" task
+   
+2. **in_progress → submitted:**
+   - Trigger: Employee call POST /api/my-tasks/:id/submit
+   - Validation: ALL required checklist items MUST be completed
+   - Impact: Manager nhận notification
+
+3. **submitted → approved/rejected:**
+   - Trigger: Manager approve/reject
+   - Impact: UserTask.completedAt set (if approved)
+
+**StoreTask Completion Rate:**
+- Auto-calculate: `completedUserTasks / totalUserTasks * 100`
+- Trigger: Mỗi khi UserTask status thay đổi
+- Impact: Dashboard stats update real-time
+
+**Notification Auto-Create:**
+| Event | Recipients | Type |
+|-------|-----------|------|
+| Broadcast publish | All store managers | 'broadcast_published' |
+| StoreTask assigned | Specific employees | 'task_assigned' |
+| UserTask submitted | Store manager | 'task_submitted' |
+| Review approved | Employee | 'task_approved' |
+| Review rejected | Employee | 'task_rejected' |
+| Task reassigned | Old + New employees | 'task_reassigned' |
+
+**Critical Validations (ALWAYS enforced):**
+- ✅ Submit task: ALL `required: true` checklist items → `completed: true`
+- ✅ Reassign: Task NOT completed yet
+- ✅ Delete: Task NOT completed yet
+- ✅ Publish broadcast: Deadline > current time
+- ✅ Manager operations: storeId === manager.ID_Branch
 
 ---
 
@@ -210,6 +528,22 @@ curl -X POST http://localhost:5000/api/auth/login \
   - "Quản trị hệ thống" → "admin"
   - "Quản lý" → "manager"
   - "Nhân viên" → "employee"
+
+⚠️ **SECURITY WARNING - Rate Limiting (Known Issue #8):**
+- Endpoint này **KHÔNG có rate limiting**
+- **Vulnerability:** Brute-force attacks có thể thử unlimited password combinations
+- **Attack vector:** Attacker thử 1000+ mật khẩu/phút → Có thể crack weak passwords
+- **Workaround:** Sử dụng Cloudflare rate limiting (nếu có) hoặc firewall rules
+- **Fix needed:** Implement `express-rate-limit` (5 attempts/15 min per IP)
+- **Priority:** HIGH - Critical security issue
+
+⚠️ **SECURITY WARNING - No Refresh Token (Known Issue #9):**
+- Chỉ có Access Token (24h expiry), **không có Refresh Token mechanism**
+- **Consequence:** Không thể thu hồi token nếu bị rò rỉ
+- Logout chỉ work ở client-side (delete local token)
+- Server không track active sessions → Token vẫn valid until expired
+- **Fix needed:** Implement refresh token flow với token rotation
+- **Priority:** LOW - Acceptable for internal system
 
 ---
 
@@ -624,7 +958,24 @@ curl -X POST http://localhost:5000/api/broadcasts \
 - Broadcast được tạo với status="draft"
 - Chưa tạo StoreTasks (phải publish trước)
 - Admin có thể edit/delete broadcast ở trạng thái draft
-- Recurring broadcasts sẽ tự động tạo broadcast mới theo schedule (⚠️ Known Issue #5: chưa implement auto-publish)
+
+⚠️ **WARNING - Recurring Broadcasts (Known Issue #5):**
+- Mặc dù schema hỗ trợ `recurring` pattern (daily/weekly/monthly)
+- **CHƯA CÓ CRON JOB** tự động publish broadcasts theo schedule
+- Admin phải **PUBLISH THỦ CÔNG** mỗi lần cho đến khi scheduler được implement
+- Recurring config hiện chỉ lưu trữ, không trigger auto-publish
+- Roadmap: Cần implement cron job để auto-create & publish (estimated 8-12 hours)
+- **Workaround hiện tại:** Admin tự tạo broadcast mới theo schedule thủ công
+
+⚠️ **SECURITY WARNING - XSS Sanitization (Known Issue #7):**
+- Các fields `title`, `description` **KHÔNG được sanitize** ở backend
+- **Attack vector:** `<script>alert('XSS')</script>` trong title → Execute khi render HTML
+- **Vulnerability:** Nếu Admin account bị compromise, attacker có thể inject malicious scripts
+- **Workaround:** Frontend PHẢI escape HTML khi display:
+  - ❌ `innerHTML` - KHÔNG dùng
+  - ✅ `textContent` hoặc React auto-escape - PHẢI dùng
+- **Fix needed:** Implement `sanitize-html` library ở `validateCreateBroadcast`
+- **Priority:** MEDIUM - Có workaround ở frontend, chỉ Admin có quyền create
 
 ---
 
@@ -943,6 +1294,25 @@ curl -X POST http://localhost:5000/api/broadcasts/65f9876543210fedcba98765/publi
 - StoreTasks được auto-create với status="pending"
 - Managers nhận notification ngay lập tức
 
+⚠️ **WARNING - Duplicate UserTask Bug:**
+- **Known Issue:** Nếu publish lại StoreTask (hoặc re-assign employees), có thể tạo DUPLICATE UserTasks
+- Root cause: Logic chưa check existing UserTask trước khi create
+- **Workaround:** 
+  - Kiểm tra kỹ trước khi publish
+  - Không publish lại broadcast đã published
+  - Dùng reassign endpoint thay vì publish lại
+- **Fix needed:** Add check `UserTask.findOne({ employeeId, storeTaskId })` trước khi create
+- Impact: Employee có thể thấy duplicate tasks trong dashboard
+- Priority: MEDIUM (có workaround)
+
+⚠️ **SECURITY WARNING - Rate Limiting (Known Issue #8):**
+- Endpoint publish **KHÔNG có rate limiting**
+- **Attack vector:** Spam publish → Tạo hàng ngàn UserTask/StorTask → Database/server overload
+- **Impact:** Server crash nếu broadcast assign to 500+ employees và publish 100+ lần
+- **Workaround:** Business logic limit (chỉ Admin có quyền publish) + Monitor logs
+- **Fix needed:** Rate limit 10 requests/minute per user
+- **Priority:** MEDIUM - Chỉ Admin access, nhưng vẫn risky
+
 ---
 
 ### POST /api/broadcasts/:id/assign
@@ -1212,13 +1582,96 @@ curl -X DELETE http://localhost:5000/api/broadcasts/user-tasks/65fa123456789abcd
 - **Note:** Manager can only see their own store's tasks
 
 ### PUT /api/store-tasks/:id/accept
-- **Description:** Accept a store task
-- **Access:** Private (Manager only)
-- **Middleware:** `authenticate`, `authorize('manager')`
-- **Validator:** `validateAcceptStoreTask`
-- **Controller:** `acceptStoreTask()`
-- **Params:** `id` - StoreTask ObjectId
-- **Note:** Only manager of the store can accept
+
+**Mô tả:** Manager chấp nhận StoreTask (status: pending → accepted)
+
+**Access:** 🔒 Manager only (own store)  
+**Business Logic:** [01-BUSINESS-LOGIC.md § StoreTask Workflow](01-BUSINESS-LOGIC.md#3-storetask-workflow)
+
+**Request:**
+
+```http
+PUT /api/store-tasks/:id/accept HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer {MANAGER_TOKEN}
+```
+
+**Validation:**
+- Manager phải là manager của store này (check Employee.ID_Branch)
+- StoreTask phải có status="pending"
+- StoreTask chưa bị reject hoặc complete
+
+**Process:**
+1. Validate manager owns this store
+2. Check StoreTask status = "pending"
+3. Update status → "accepted"
+4. Set acceptedAt timestamp
+5. Set acceptedBy = manager employeeId
+6. Create notification cho admin (task accepted)
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "message": "StoreTask đã được chấp nhận",
+  "data": {
+    "_id": "65f9876543210fedcba98766",
+    "broadcastId": "65f9876543210fedcba98765",
+    "storeId": "65f1234567890abcdef11111",
+    "status": "accepted",
+    "acceptedAt": "2026-03-20T08:00:00.000Z",
+    "acceptedBy": "65f1234567890abcdef12345"
+  }
+}
+```
+
+**Response 403 (Not Manager of This Store):**
+
+```json
+{
+  "success": false,
+  "message": "Bạn không phải manager của cửa hàng này"
+}
+```
+
+**Response 400 (Already Accepted/Rejected):**
+
+```json
+{
+  "success": false,
+  "message": "StoreTask đã được xử lý rồi"
+}
+```
+
+**Implementation:**
+- File: `src/controllers/storeTaskController.js`
+- Function: `acceptStoreTask()`
+
+**cURL Example:**
+
+```bash
+curl -X PUT http://localhost:5000/api/store-tasks/65f9876543210fedcba98766/accept \
+  -H "Authorization: Bearer MANAGER_TOKEN"
+```
+
+⚠️ **CRITICAL - Status Transition Logic:**
+- Khi accept: status chuyển `pending` → `accepted`
+- **KHÔNG Tự động** chuyển sang `in_progress`!
+- Status `in_progress` chỉ kích hoạt khi:
+  - Manager assign employees (POST /api/store-tasks/:id/assign)
+  - UserTasks được tạo
+  - Có ít nhất 1 employee được giao việc
+- **Workflow đúng:**
+  1. Admin publish broadcast → StoreTask status="pending"
+  2. Manager accept → StoreTask status="accepted"
+  3. Manager assign employees → StoreTask status="in_progress" + create UserTasks
+  4. Employees làm việc → UserTask status changes
+  5. All UserTasks done → StoreTask status="completed"
+- **Common mistake:** Developers nghĩ accept = in_progress → SAI!
+- **Frontend UX:** Sau khi accept, hiện button "Assign Employees" để manager giao việc
+
+---
 
 ### PUT /api/store-tasks/:id/reject
 - **Description:** Reject a store task
@@ -1578,6 +2031,18 @@ curl -X PUT http://localhost:5000/api/my-tasks/65fa123456789abcdef00001/checklis
 - StoreTask completion rate cũng được update
 - Chỉ update được khi task đang in_progress hoặc rejected
 
+⚠️ **AUTO BEHAVIOR - Status Transition:**
+- **Lần đầu tiên** update checklist khi task còn `assigned` → **Tự động chuyển sang `in_progress`**
+- Logic: `if (status === 'assigned' && isFirstChecklistUpdate) { status = 'in_progress'; startedAt = new Date(); }`
+- Impact: Employee không cần manually "start" task
+- **Progress auto-calculation:**
+  - `completedItems = checklist.filter(i => i.completed).length`
+  - `progress = (completedItems / checklist.length) * 100`
+- **Side effect:** StoreTask completion rate recalculated:
+  - Lặp qua tất cả UserTasks của StoreTask
+  - Calculate average progress của store
+- **Notification:** Không tạo notification khi update checklist (chỉ khi submit)
+
 ---
 
 ### POST /api/my-tasks/:id/evidence
@@ -1716,6 +2181,19 @@ curl -X POST http://localhost:5000/api/my-tasks/65fa123456789abcdef00001/evidenc
 - Có thể upload nhiều evidences trong 1 request
 - Employee có thể xóa evidence bằng cách gửi full array mới (không có API riêng để xóa)
 
+⚠️ **AUTO BEHAVIOR - Status Transition:**
+- **Lần đầu tiên** upload evidence khi task còn `assigned` → **Tự động chuyển sang `in_progress`**
+- Logic tương tự checklist update: `if (status === 'assigned') { status = 'in_progress'; startedAt = new Date(); }`
+- Impact: Employee chỉ cần upload photo/video đầu tiên là task auto-start
+- **Evidence limit:** Không giới hạn số lượng evidences (nhưng nên limit ở frontend)
+
+⚠️ **SECURITY WARNING - Rate Limiting (Known Issue #8):**
+- Upload endpoint **KHÔNG có rate limiting**
+- **Attack vector:** Spam upload → Storage overload
+- **Workaround:** Limit file size (max 10MB/file) + total uploads/day
+- **Fix needed:** Rate limit 20 uploads/hour per employee
+- **Priority:** MEDIUM
+
 ---
 
 ### POST /api/my-tasks/:id/submit
@@ -1824,6 +2302,27 @@ curl -X POST http://localhost:5000/api/my-tasks/65fa123456789abcdef00001/submit 
 - Nếu manager reject:
   - Status → 'rejected'
   - Employee phải fix và submit lại
+
+⚠️ **CRITICAL VALIDATION:**
+- **TẤT CẢ** checklist items có `required: true` **BẮT BUỘC** phải `completed: true`
+- Validation **NGHIÊM NGẶT:** Thiếu 1 item required là API trả về 400 Bad Request
+- Frontend PHẢI validate trước khi gọi API submit
+
+⚠️ **AUTO BEHAVIOR - Status Transition:**
+- Submit thành công → Status: `in_progress` → `submitted`
+- `submittedAt` được set = current timestamp
+- **Notification auto-create:**
+  - Type: `'task_submitted'`
+  - Recipient: Manager của store (storeTask.storeId → manager)
+  - Message: "{EmployeeName} đã nộp task {TaskTitle}"
+- Manager nhận thông báo real-time (nếu có WebSocket) hoặc khi refresh dashboard
+- Employee **không thể edit** task sau khi submit (phải đợi review)
+- **Side effect:** StoreTask completion rate recalculated:
+  - `completedCount = UserTasks.filter(ut => ut.status === 'approved').length`
+  - `completionRate = (completedCount / totalUserTasks) * 100`
+- Error message sẽ liệt kê chính xác items nào chưa hoàn thành
+- **Không được phép** skip validation này - đây là business rule cốt lõi
+- Manager sẽ reject nếu employee submit task không đủ yêu cầu
 
 ---
 
