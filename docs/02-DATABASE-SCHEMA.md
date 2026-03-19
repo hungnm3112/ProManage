@@ -643,9 +643,8 @@ assigned → in_progress → submitted → approved
 1. **Notification Model Refs**
    - **Issue:** Uses `'Nhan_vien'` ref instead of `'Employee'`
    - **Location:** `Notification.js` lines ~12, ~63
-   - **Impact:** Will cause mongoose errors when populating
-   - **Fix Required:** Change refs to `'Employee'`
-   - **Status:** ❌ NOT FIXED
+   - **Impact:** Fixed March 19, 2026 - All refs now use `'Employee'`
+   - **Status:** ✅ FIXED
 
 2. **UserTask Model Ref** 
    - **Issue:** Previously used `'Nhan_vien'` ref
@@ -744,11 +743,11 @@ assigned → in_progress → submitted → approved
 **Audit Duration:** ~15 minutes  
 **Files Scanned:** 8 model files (7 active + 1 utility)  
 **Active Models:** 7  
-**Critical Issues Found:** 1 (Notification refs - FIXED)  
+**Critical Issues Found:** 1 (Notification refs - ✅ FIXED 19/03/2026)  
 **Warnings:** 3 (data type inconsistencies)
 
 **Next Steps:**
-1. Fix Notification model refs
+1. ✅ Fix Notification model refs (COMPLETED 19/03/2026)
 2. Test all models with database
 3. Verify all populate operations work
 4. Create API endpoint audit (Step 1.2)
