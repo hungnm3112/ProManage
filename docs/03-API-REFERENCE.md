@@ -93,26 +93,274 @@ The following collections are **synced from external systems** and are **READ-ON
 **File:** `src/routes/authRoutes.js`  
 **Controller:** `src/controllers/authController.js`
 
+---
+
 ### POST /api/auth/login
-- **Description:** Login với phone + password
-- **Access:** Public
-- **Middleware:** None
-- **Controller:** `login()`
-- **Body:** `{ phone, password }`
-- **Response:** `{ token, employee }`
+
+**Mô tả:** Đăng nhập với số điện thoại và mật khẩu
+
+**Access:** 🌐 Public (không cần token)  
+**Business Logic:** [01-BUSINESS-LOGIC.md § Authentication](01-BUSINESS-LOGIC.md#1-authentication--authorization)
+
+**Request:**
+
+```http
+POST /api/auth/login HTTP/1.1
+Host: localhost:5000
+Content-Type: application/json
+
+{
+  "phone": "0987654321",
+  "password": "password123"
+}
+```
+
+**Request Body:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `phone` | string | ✅ Yes | Số điện thoại (10 số) |
+| `password` | string | ✅ Yes | Mật khẩu (min 6 ký tự) |
+
+**Validation Rules:**
+- `phone`: Phải là 10 chữ số, bắt đầu bằng 0
+- `password`: Không được rỗng
+- Employee phải tồn tại trong database
+- Password phải match (HMAC-SHA512 + salt)
+- Employee phải có status active
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "message": "Đăng nhập thành công",
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "employee": {
+      "_id": "65f1234567890abcdef12345",
+      "ID_Nhan_vien": "NV001",
+      "Ho_ten": "Nguyễn Văn A",
+      "So_dien_thoai": "0987654321",
+      "ID_Branch": {
+        "_id": "65f1234567890abcdef11111",
+        "Ten_thuong_hieu": "Chi nhánh HCM"
+      },
+      "ID_GroupUser": {
+        "_id": "65f1234567890abcdef22222",
+        "Ten_nhom": "Quản lý"
+      },
+      "role": "manager"
+    }
+  }
+}
+```
+
+**Response 400 (Bad Request):**
+
+```json
+{
+  "success": false,
+  "message": "Validation error",
+  "errors": [
+    "Số điện thoại không hợp lệ",
+    "Mật khẩu không được để trống"
+  ]
+}
+```
+
+**Response 401 (Unauthorized):**
+
+```json
+{
+  "success": false,
+  "message": "Số điện thoại hoặc mật khẩu không đúng"
+}
+```
+
+**Response 403 (Forbidden):**
+
+```json
+{
+  "success": false,
+  "message": "Tài khoản đã bị vô hiệu hóa"
+}
+```
+
+**Implementation:**
+- File: `src/controllers/authController.js`
+- Function: `login()`
+- Lines: ~15-60
+
+**cURL Example:**
+
+```bash
+curl -X POST http://localhost:5000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "phone": "0987654321",
+    "password": "password123"
+  }'
+```
+
+**Notes:**
+- Token expires sau 24 giờ
+- Password được hash bằng HMAC-SHA512 + salt
+- Role được map từ GroupUser.Ten_nhom:
+  - "Quản trị hệ thống" → "admin"
+  - "Quản lý" → "manager"
+  - "Nhân viên" → "employee"
+
+---
 
 ### POST /api/auth/logout
-- **Description:** Logout (client xóa token)
-- **Access:** Private (authenticated)
-- **Middleware:** `authenticate`
-- **Controller:** `logout()`
+
+**Mô tả:** Đăng xuất (client-side token removal)
+
+**Access:** 🔒 Private (authenticated user)  
+**Business Logic:** [01-BUSINESS-LOGIC.md § Authentication](01-BUSINESS-LOGIC.md#1-authentication--authorization)
+
+**Request:**
+
+```http
+POST /api/auth/logout HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+**Request Headers:**
+
+| Header | Type | Required | Description |
+|--------|------|----------|-------------|
+| `Authorization` | string | ✅ Yes | Bearer {token} |
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "message": "Đăng xuất thành công"
+}
+```
+
+**Response 401 (Unauthorized):**
+
+```json
+{
+  "success": false,
+  "message": "Token không hợp lệ hoặc đã hết hạn"
+}
+```
+
+**Implementation:**
+- File: `src/controllers/authController.js`
+- Function: `logout()`
+- Lines: ~62-70
+
+**cURL Example:**
+
+```bash
+curl -X POST http://localhost:5000/api/auth/logout \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+```
+
+**Notes:**
+- Server không lưu token (stateless JWT)
+- Logout chỉ trả về success message
+- Client phải xóa token khỏi localStorage/memory
+- Token vẫn valid cho đến khi hết hạn
+
+---
 
 ### GET /api/auth/me
-- **Description:** Get thông tin user hiện tại
-- **Access:** Private (authenticated)
-- **Middleware:** `authenticate`
-- **Controller:** `getMe()`
-- **Response:** Employee info with role
+
+**Mô tả:** Lấy thông tin user hiện tại (authenticated user info)
+
+**Access:** 🔒 Private (authenticated user)  
+**Business Logic:** [01-BUSINESS-LOGIC.md § Authentication](01-BUSINESS-LOGIC.md#1-authentication--authorization)
+
+**Request:**
+
+```http
+GET /api/auth/me HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+**Request Headers:**
+
+| Header | Type | Required | Description |
+|--------|------|----------|-------------|
+| `Authorization` | string | ✅ Yes | Bearer {token} |
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "65f1234567890abcdef12345",
+    "ID_Nhan_vien": "NV001",
+    "Ho_ten": "Nguyễn Văn A",
+    "So_dien_thoai": "0987654321",
+    "Ngay_sinh": "1990-01-15T00:00:00.000Z",
+    "Dia_chi": "123 Nguyễn Huệ, Q1, HCM",
+    "ID_Branch": {
+      "_id": "65f1234567890abcdef11111",
+      "ID_Thuong_hieu": "TH001",
+      "Ten_thuong_hieu": "Chi nhánh HCM",
+      "Dia_chi": "456 Lý Tự Trọng, Q1, HCM"
+    },
+    "ID_GroupUser": {
+      "_id": "65f1234567890abcdef22222",
+      "ID_Nhom": "NHOM_QL",
+      "Ten_nhom": "Quản lý",
+      "MoTa": "Quản lý chi nhánh"
+    },
+    "Ngay_bat_dau_lam": "2023-01-01T00:00:00.000Z",
+    "Trang_thai": 1,
+    "role": "manager",
+    "createdAt": "2023-01-01T00:00:00.000Z",
+    "updatedAt": "2026-03-19T00:00:00.000Z"
+  }
+}
+```
+
+**Response 401 (Unauthorized):**
+
+```json
+{
+  "success": false,
+  "message": "Token không hợp lệ hoặc đã hết hạn"
+}
+```
+
+**Response 404 (Not Found):**
+
+```json
+{
+  "success": false,
+  "message": "Không tìm thấy thông tin nhân viên"
+}
+```
+
+**Implementation:**
+- File: `src/controllers/authController.js`
+- Function: `getMe()`
+- Lines: ~72-95
+
+**cURL Example:**
+
+```bash
+curl -X GET http://localhost:5000/api/auth/me \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+```
+
+**Notes:**
+- Trả về full employee info với populated Branch và GroupUser
+- `role` field được computed từ GroupUser.Ten_nhom
+- Dùng để verify token và get current user context
+- Frontend nên call API này sau khi login để cache user info
 
 ---
 
@@ -214,100 +462,723 @@ The following endpoints were **removed** because Brand data is managed by extern
 **Controller:** `src/controllers/broadcastController.js`  
 **Validators:** `src/validators/broadcastValidator.js`
 
+---
+
 ### POST /api/broadcasts
-- **Description:** Create a new broadcast (draft status)
-- **Access:** Private (Admin only)
-- **Middleware:** `authenticate`, `authorize('admin')`
-- **Validator:** `validateCreateBroadcast`
-- **Controller:** `createBroadcast()`
-- **Body:**
-  - `title` - String (required)
-  - `description` - String (required)
-  - `priority` - 'low' | 'medium' | 'high' | 'urgent'
-  - `deadline` - Date (required)
-  - `assignedStores` - Array of Brand IDs (required)
-  - `checklist` - Array of checklist items
-  - `attachments` - Array of attachment objects
-  - `recurring` - Recurring pattern object
+
+**Mô tả:** Tạo broadcast mới (status = draft)
+
+**Access:** 🔒 Admin only  
+**Business Logic:** [01-BUSINESS-LOGIC.md § Broadcast Management](01-BUSINESS-LOGIC.md#2-broadcast-management)
+
+**Request:**
+
+```http
+POST /api/broadcasts HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer {ADMIN_TOKEN}
+Content-Type: application/json
+
+{
+  "title": "Kiểm tra vệ sinh cửa hàng tháng 3",
+  "description": "Kiểm tra và đảm bảo vệ sinh toàn bộ cửa hàng",
+  "priority": "high",
+  "deadline": "2026-03-31T23:59:59.000Z",
+  "assignedStores": ["65f1234567890abcdef11111", "65f1234567890abcdef11112"],
+  "checklist": [
+    {
+      "title": "Lau sàn nhà",
+      "description": "Lau sạch toàn bộ sàn",
+      "required": true
+    },
+    {
+      "title": "Chụp ảnh sau khi hoàn thành",
+      "required": true
+    }
+  ],
+  "attachments": [
+    {
+      "url": "https://example.com/guide.pdf",
+      "filename": "huong-dan-ve-sinh.pdf",
+      "type": "document"
+    }
+  ],
+  "recurring": {
+    "enabled": true,
+    "frequency": "monthly",
+    "interval": 1,
+    "dayOfMonth": 25
+  }
+}
+```
+
+**Request Body:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `title` | string | ✅ Yes | Tiêu đề broadcast (max 200 chars) |
+| `description` | string | ✅ Yes | Mô tả chi tiết |
+| `priority` | string | ❌ No | 'low' \| 'medium' \| 'high' \| 'urgent' (default: 'medium') |
+| `deadline` | Date | ✅ Yes | Deadline (phải là thời gian tương lai) |
+| `assignedStores` | array | ✅ Yes | Array of Brand ObjectIds |
+| `checklist` | array | ❌ No | Array of checklist items |
+| `attachments` | array | ❌ No | Array of attachment objects |
+| `recurring` | object | ❌ No | Recurring pattern config |
+
+**Checklist Item Schema:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `title` | string | ✅ Yes | Tiêu đề item |
+| `description` | string | ❌ No | Mô tả chi tiết |
+| `required` | boolean | ❌ No | Item bắt buộc? (default: false) |
+
+**Recurring Pattern Schema:**
+
+| Field | Type | Options | Description |
+|-------|------|---------|-------------|
+| `enabled` | boolean | - | Bật recurring? |
+| `frequency` | string | 'daily' \| 'weekly' \| 'monthly' | Tần suất lặp lại |
+| `interval` | number | 1-12 | Lặp lại mỗi N period |
+| `dayOfWeek` | number | 0-6 | Ngày trong tuần (0=CN, nếu weekly) |
+| `dayOfMonth` | number | 1-31 | Ngày trong tháng (nếu monthly) |
+
+**Validation Rules:**
+- `title`: Required, max 200 chars
+- `description`: Required
+- `deadline`: Phải là thời gian tương lai
+- `assignedStores`: Phải có ít nhất 1 store, stores phải tồn tại
+- `priority`: Phải thuộc ['low', 'medium', 'high', 'urgent']
+- `recurring.frequency`: Nếu có recurring, phải có frequency
+- `recurring.dayOfMonth`: Nếu monthly, phải có dayOfMonth (1-31)
+
+**Response 201 (Success):**
+
+```json
+{
+  "success": true,
+  "message": "Broadcast đã được tạo thành công",
+  "data": {
+    "_id": "65f9876543210fedcba98765",
+    "title": "Kiểm tra vệ sinh cửa hàng tháng 3",
+    "description": "Kiểm tra và đảm bảo vệ sinh toàn bộ cửa hàng",
+    "priority": "high",
+    "status": "draft",
+    "deadline": "2026-03-31T23:59:59.000Z",
+    "assignedStores": ["65f1234567890abcdef11111", "65f1234567890abcdef11112"],
+    "checklist": [...],
+    "attachments": [...],
+    "recurring": {...},
+    "createdBy": "65f1234567890abcdef12345",
+    "createdAt": "2026-03-19T10:00:00.000Z",
+    "updatedAt": "2026-03-19T10:00:00.000Z"
+  }
+}
+```
+
+**Response 400 (Bad Request):**
+
+```json
+{
+  "success": false,
+  "message": "Validation error",
+  "errors": [
+    "Deadline phải là thời gian tương lai",
+    "Phải chọn ít nhất 1 cửa hàng"
+  ]
+}
+```
+
+**Response 403 (Forbidden):**
+
+```json
+{
+  "success": false,
+  "message": "Chỉ Admin mới có quyền tạo broadcast"
+}
+```
+
+**Implementation:**
+- File: `src/controllers/broadcastController.js`
+- Function: `createBroadcast()`
+
+**cURL Example:**
+
+```bash
+curl -X POST http://localhost:5000/api/broadcasts \
+  -H "Authorization: Bearer ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Kiểm tra vệ sinh tháng 3",
+    "description": "Kiểm tra vệ sinh toàn bộ cửa hàng",
+    "priority": "high",
+    "deadline": "2026-03-31T23:59:59.000Z",
+    "assignedStores": ["65f1234567890abcdef11111"],
+    "checklist": [
+      {"title": "Lau sàn", "required": true}
+    ]
+  }'
+```
+
+**Notes:**
+- Broadcast được tạo với status="draft"
+- Chưa tạo StoreTasks (phải publish trước)
+- Admin có thể edit/delete broadcast ở trạng thái draft
+- Recurring broadcasts sẽ tự động tạo broadcast mới theo schedule (⚠️ Known Issue #5: chưa implement auto-publish)
+
+---
 
 ### GET /api/broadcasts
-- **Description:** Get all broadcasts with filtering
-- **Access:** Private (Admin only)
-- **Middleware:** `authenticate`, `authorize('admin')`
-- **Validator:** `validateGetBroadcasts`
-- **Controller:** `getBroadcasts()`
-- **Query Params:**
-  - `status` - Filter by status
-  - `priority` - Filter by priority
-  - `search` - Search by title
-  - `page`, `limit` - Pagination
+
+**Mô tả:** Lấy danh sách tất cả broadcasts (Admin view)
+
+**Access:** 🔒 Admin only  
+**Business Logic:** [01-BUSINESS-LOGIC.md § Broadcast Management](01-BUSINESS-LOGIC.md#2-broadcast-management)
+
+**Request:**
+
+```http
+GET /api/broadcasts?status=published&priority=high&page=1&limit=20 HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer {ADMIN_TOKEN}
+```
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `status` | string | ❌ No | Filter: 'draft' \| 'published' |
+| `priority` | string | ❌ No | Filter: 'low' \| 'medium' \| 'high' \| 'urgent' |
+| `search` | string | ❌ No | Search trong title/description |
+| `page` | number | ❌ No | Page number (default: 1) |
+| `limit` | number | ❌ No | Items per page (default: 20) |
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "broadcasts": [
+      {
+        "_id": "65f9876543210fedcba98765",
+        "title": "Kiểm tra vệ sinh tháng 3",
+        "priority": "high",
+        "status": "published",
+        "deadline": "2026-03-31T23:59:59.000Z",
+        "assignedStores": [
+          {
+            "_id": "65f1234567890abcdef11111",
+            "Ten_thuong_hieu": "Chi nhánh HCM"
+          }
+        ],
+        "createdBy": {
+          "_id": "65f1234567890abcdef12345",
+          "Ho_ten": "Admin User"
+        },
+        "createdAt": "2026-03-19T10:00:00.000Z",
+        "totalStoreTasks": 5,
+        "completedStoreTasks": 2
+      }
+    ],
+    "pagination": {
+      "currentPage": 1,
+      "totalPages": 3,
+      "totalItems": 45,
+      "itemsPerPage": 20
+    }
+  }
+}
+```
+
+**cURL Example:**
+
+```bash
+curl -X GET "http://localhost:5000/api/broadcasts?status=published&page=1" \
+  -H "Authorization: Bearer ADMIN_TOKEN"
+```
+
+---
 
 ### GET /api/broadcasts/:id
-- **Description:** Get broadcast by ID with store tasks
-- **Access:** Private (Admin only)
-- **Middleware:** `authenticate`, `authorize('admin')`
-- **Validator:** `validateGetBroadcastById`
-- **Controller:** `getBroadcastById()`
-- **Params:** `id` - Broadcast ObjectId
-- **Response:** Broadcast with populated store tasks
+
+**Mô tả:** Lấy chi tiết 1 broadcast với StoreTasks
+
+**Access:** 🔒 Admin only  
+**Business Logic:** [01-BUSINESS-LOGIC.md § Broadcast Management](01-BUSINESS-LOGIC.md#2-broadcast-management)
+
+**Request:**
+
+```http
+GET /api/broadcasts/65f9876543210fedcba98765 HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer {ADMIN_TOKEN}
+```
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "65f9876543210fedcba98765",
+    "title": "Kiểm tra vệ sinh tháng 3",
+    "description": "Kiểm tra toàn bộ",
+    "priority": "high",
+    "status": "published",
+    "deadline": "2026-03-31T23:59:59.000Z",
+    "assignedStores": [...],
+    "checklist": [...],
+    "storeTasks": [
+      {
+        "_id": "65f9876543210fedcba98766",
+        "storeId": {
+          "_id": "65f1234567890abcdef11111",
+          "Ten_thuong_hieu": "Chi nhánh HCM"
+        },
+        "status": "in_progress",
+        "assignedEmployees": [
+          {
+            "_id": "65f1234567890abcdef12346",
+            "Ho_ten": "Nguyễn Văn B"
+          }
+        ],
+        "completionRate": 50
+      }
+    ],
+    "createdAt": "2026-03-19T10:00:00.000Z"
+  }
+}
+```
+
+**Response 404:**
+
+```json
+{
+  "success": false,
+  "message": "Không tìm thấy broadcast"
+}
+```
+
+**cURL Example:**
+
+```bash
+curl -X GET http://localhost:5000/api/broadcasts/65f9876543210fedcba98765 \
+  -H "Authorization: Bearer ADMIN_TOKEN"
+```
+
+---
 
 ### PUT /api/broadcasts/:id
-- **Description:** Update broadcast (only draft status)
-- **Access:** Private (Admin only)
-- **Middleware:** `authenticate`, `authorize('admin')`
-- **Validator:** `validateUpdateBroadcast`
-- **Controller:** `updateBroadcast()`
-- **Params:** `id` - Broadcast ObjectId
-- **Body:** Updated broadcast fields
-- **Note:** Can only update draft broadcasts
+
+**Mô tả:** Update broadcast (chỉ draft được edit)
+
+**Access:** 🔒 Admin only  
+**Business Logic:** [01-BUSINESS-LOGIC.md § Broadcast Management](01-BUSINESS-LOGIC.md#2-broadcast-management)
+
+**Request:**
+
+```http
+PUT /api/broadcasts/65f9876543210fedcba98765 HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer {ADMIN_TOKEN}
+Content-Type: application/json
+
+{
+  "title": "Kiểm tra vệ sinh tháng 3 (updated)",
+  "priority": "urgent",
+  "deadline": "2026-03-30T23:59:59.000Z"
+}
+```
+
+**Validation:**
+- Chỉ update được broadcast có status="draft"
+- Không update được published broadcasts
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "message": "Broadcast đã được cập nhật",
+  "data": {
+    "_id": "65f9876543210fedcba98765",
+    "title": "Kiểm tra vệ sinh tháng 3 (updated)",
+    "priority": "urgent",
+    "status": "draft",
+    ...
+  }
+}
+```
+
+**Response 400 (Broadcast đã published):**
+
+```json
+{
+  "success": false,
+  "message": "Không thể sửa broadcast đã published"
+}
+```
+
+**cURL Example:**
+
+```bash
+curl -X PUT http://localhost:5000/api/broadcasts/65f9876543210fedcba98765 \
+  -H "Authorization: Bearer ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Updated title", "priority": "urgent"}'
+```
+
+---
 
 ### DELETE /api/broadcasts/:id
-- **Description:** Delete broadcast (only draft status)
-- **Access:** Private (Admin only)
-- **Middleware:** `authenticate`, `authorize('admin')`
-- **Validator:** `validateDeleteBroadcast`
-- **Controller:** `deleteBroadcast()`
-- **Params:** `id` - Broadcast ObjectId
-- **Note:** Can only delete draft broadcasts
+
+**Mô tả:** Xóa broadcast (chỉ draft được xóa)
+
+**Access:** 🔒 Admin only  
+**Business Logic:** [01-BUSINESS-LOGIC.md § Broadcast Management](01-BUSINESS-LOGIC.md#2-broadcast-management)
+
+**Request:**
+
+```http
+DELETE /api/broadcasts/65f9876543210fedcba98765 HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer {ADMIN_TOKEN}
+```
+
+**Validation:**
+- Chỉ xóa được broadcast có status="draft"
+- Không xóa được published broadcasts (đã có StoreTasks)
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "message": "Broadcast đã được xóa"
+}
+```
+
+**Response 400 (Broadcast đã published):**
+
+```json
+{
+  "success": false,
+  "message": "Không thể xóa broadcast đã published"
+}
+```
+
+**cURL Example:**
+
+```bash
+curl -X DELETE http://localhost:5000/api/broadcasts/65f9876543210fedcba98765 \
+  -H "Authorization: Bearer ADMIN_TOKEN"
+```
+
+---
 
 ### POST /api/broadcasts/:id/publish
-- **Description:** Publish broadcast and create store tasks
-- **Access:** Private (Admin only)
-- **Middleware:** `authenticate`, `authorize('admin')`
-- **Validator:** `validatePublishBroadcast`
-- **Controller:** `publishBroadcast()`
-- **Params:** `id` - Broadcast ObjectId
-- **Note:** Creates StoreTask for each assigned store, notifies managers
+
+**Mô tả:** Publish broadcast → Tạo StoreTasks cho các stores → Notify managers
+
+**Access:** 🔒 Admin only  
+**Business Logic:** [01-BUSINESS-LOGIC.md § Broadcast Management](01-BUSINESS-LOGIC.md#2-broadcast-management)
+
+**Request:**
+
+```http
+POST /api/broadcasts/65f9876543210fedcba98765/publish HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer {ADMIN_TOKEN}
+```
+
+**Validation:**
+- Broadcast phải có status="draft"
+- Phải có assignedStores
+- Deadline phải là thời gian tương lai
+
+**Process:**
+1. Validate broadcast draft
+2. Tìm manager cho mỗi store (từ Employee.ID_Branch + GroupUser role)
+3. Tạo StoreTask cho mỗi store
+4. Tạo Notification cho mỗi manager
+5. Update broadcast status → "published"
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "message": "Broadcast đã được publish",
+  "data": {
+    "broadcast": {
+      "_id": "65f9876543210fedcba98765",
+      "status": "published",
+      ...
+    },
+    "storeTasksCreated": 5,
+    "notificationsSent": 5
+  }
+}
+```
+
+**Response 400 (Broadcast không phải draft):**
+
+```json
+{
+  "success": false,
+  "message": "Chỉ có thể publish broadcast ở trạng thái draft"
+}
+```
+
+**cURL Example:**
+
+```bash
+curl -X POST http://localhost:5000/api/broadcasts/65f9876543210fedcba98765/publish \
+  -H "Authorization: Bearer ADMIN_TOKEN"
+```
+
+**Notes:**
+- Sau khi publish, không thể edit/delete broadcast
+- StoreTasks được auto-create với status="pending"
+- Managers nhận notification ngay lập tức
+
+---
 
 ### POST /api/broadcasts/:id/assign
-- **Description:** Assign broadcast to stores or employees
-- **Access:** Private (Admin only)
-- **Middleware:** `authenticate`, `authorize('admin')`
-- **Validator:** `validateAssignBroadcast`
-- **Controller:** `assignBroadcast()`
-- **Params:** `id` - Broadcast ObjectId
-- **Body:** 
-  - `storeAssignments` - Array of `{ storeId, employeeIds }`
-  - OR `employeeIds` - Array of Employee IDs
+
+**Mô tả:** Assign broadcast directly đến stores hoặc employees (2 modes)
+
+**Access:** 🔒 Admin only  
+**Business Logic:** [01-BUSINESS-LOGIC.md § Broadcast Management](01-BUSINESS-LOGIC.md#2-broadcast-management)
+
+**Request Mode 1 (Store Assignments):**
+
+```http
+POST /api/broadcasts/65f9876543210fedcba98765/assign HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer {ADMIN_TOKEN}
+Content-Type: application/json
+
+{
+  "storeAssignments": [
+    {
+      "storeId": "65f1234567890abcdef11111",
+      "employeeIds": ["65f1234567890abcdef12346", "65f1234567890abcdef12347"]
+    },
+    {
+      "storeId": "65f1234567890abcdef11112",
+      "employeeIds": ["65f1234567890abcdef12348"]
+    }
+  ]
+}
+```
+
+**Request Mode 2 (Direct Employee Assignment):**
+
+```http
+POST /api/broadcasts/65f9876543210fedcba98765/assign HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer {ADMIN_TOKEN}
+Content-Type: application/json
+
+{
+  "employeeIds": ["65f1234567890abcdef12346", "65f1234567890abcdef12347"]
+}
+```
+
+**Process:**
+- **Mode 1:** Tạo/Update StoreTasks → Assign employees → Create UserTasks
+- **Mode 2:** Direct assign employees → Create UserTasks (auto-detect stores)
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "message": "Assign thành công",
+  "data": {
+    "storeTasksCreated": 2,
+    "userTasksCreated": 3,
+    "notificationsSent": 3
+  }
+}
+```
+
+**cURL Example:**
+
+```bash
+curl -X POST http://localhost:5000/api/broadcasts/65f9876543210fedcba98765/assign \
+  -H "Authorization: Bearer ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "storeAssignments": [
+      {
+        "storeId": "65f1234567890abcdef11111",
+        "employeeIds": ["65f1234567890abcdef12346"]
+      }
+    ]
+  }'
+```
+
+---
 
 ### PUT /api/broadcasts/user-tasks/:taskId
-- **Description:** Update a user task (admin can edit task details and reassign)
-- **Access:** Private (Admin only)
-- **Middleware:** `authenticate`, `authorize('admin')`
-- **Validator:** `validateUpdateUserTask`
-- **Controller:** `updateUserTask()`
-- **Params:** `taskId` - UserTask ObjectId
-- **Body:** `{ employeeId }` - New employee for reassignment
-- **Note:** ⚠️ Uses userTaskId (not storeTaskId) - FIXED March 18, 2026
+
+**Mô tả:** Reassign UserTask sang employee khác (Admin feature)
+
+**Access:** 🔒 Admin only  
+**Business Logic:** [01-BUSINESS-LOGIC.md § UserTask Workflow](01-BUSINESS-LOGIC.md#4-usertask-workflow)
+
+⚠️ **FIXED March 18, 2026:** Dùng `userTaskId` (không phải storeTaskId)
+
+**Request:**
+
+```http
+PUT /api/broadcasts/user-tasks/65fa123456789abcdef00001 HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer {ADMIN_TOKEN}
+Content-Type: application/json
+
+{
+  "employeeId": "65f1234567890abcdef12349"
+}
+```
+
+**Request Body:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `employeeId` | string | ✅ Yes | ObjectId của employee mới |
+
+**Validation:**
+- UserTask phải tồn tại
+- UserTask chưa completed
+- Employee mới phải active
+- Employee mới không được có task này rồi
+
+**Process:**
+1. Find UserTask by taskId
+2. Update UserTask.employeeId → new employee
+3. Nếu employee mới thuộc store khác:
+   - Find/Create StoreTask cho store mới
+   - Update UserTask.storeTaskId
+   - Remove từ old StoreTask.assignedEmployees
+   - Add vào new StoreTask.assignedEmployees
+4. Create notification cho employee mới
+5. Create notification cho old employee (task removed)
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "message": "Reassign thành công",
+  "data": {
+    "userTask": {
+      "_id": "65fa123456789abcdef00001",
+      "employeeId": "65f1234567890abcdef12349",
+      "oldEmployeeId": "65f1234567890abcdef12346",
+      ...
+    }
+  }
+}
+```
+
+**Response 400 (Task đã completed):**
+
+```json
+{
+  "success": false,
+  "message": "Không thể reassign task đã hoàn thành"
+}
+```
+
+**Implementation:**
+- File: `src/controllers/broadcastController.js`
+- Function: `updateUserTask()` (renamed from reassignTask)
+- **Bug History:** Trước đây dùng sai storeTaskId, đã fix 18/03/2026
+
+**cURL Example:**
+
+```bash
+curl -X PUT http://localhost:5000/api/broadcasts/user-tasks/65fa123456789abcdef00001 \
+  -H "Authorization: Bearer ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"employeeId": "65f1234567890abcdef12349"}'
+```
+
+**Notes:**
+- ⚠️ Endpoint parameter là `taskId` = **userTaskId** (không phải storeTaskId)
+- Có thể reassign cross-store (tự động xử lý StoreTask changes)
+- Không tạo UserTask mới - chỉ update existing UserTask
+- Old employee và new employee đều nhận notification
+
+---
 
 ### DELETE /api/broadcasts/user-tasks/:taskId
-- **Description:** Delete a user task (cannot delete completed tasks)
-- **Access:** Private (Admin only)
-- **Middleware:** `authenticate`, `authorize('admin')`
-- **Validator:** `validateDeleteUserTask`
-- **Controller:** `deleteUserTask()`
-- **Params:** `taskId` - UserTask ObjectId
-- **Note:** ⚠️ Uses userTaskId - FIXED March 18, 2026
+
+**Mô tả:** Xóa UserTask (Admin feature, không xóa được completed tasks)
+
+**Access:** 🔒 Admin only  
+**Business Logic:** [01-BUSINESS-LOGIC.md § UserTask Workflow](01-BUSINESS-LOGIC.md#4-usertask-workflow)
+
+⚠️ **FIXED March 18, 2026:** Dùng `userTaskId` (không phải storeTaskId)
+
+**Request:**
+
+```http
+DELETE /api/broadcasts/user-tasks/65fa123456789abcdef00001 HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer {ADMIN_TOKEN}
+```
+
+**Validation:**
+- UserTask phải có userTaskId (phải đã assigned)
+- UserTask chưa completed
+
+**Process:**
+1. Find UserTask by taskId
+2. Delete UserTask document
+3. Remove từ StoreTask.assignedEmployees
+4. Update StoreTask completion rate
+5. Create notification cho employee (task cancelled)
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "message": "UserTask đã được xóa"
+}
+```
+
+**Response 400 (Task đã completed):**
+
+```json
+{
+  "success": false,
+  "message": "Không thể xóa task đã hoàn thành"
+}
+```
+
+**Implementation:**
+- File: `src/controllers/broadcastController.js`
+- Function: `deleteUserTask()` (renamed from deleteTask)
+- **Bug History:** Trước đây dùng sai storeTaskId, đã fix 18/03/2026
+
+**cURL Example:**
+
+```bash
+curl -X DELETE http://localhost:5000/api/broadcasts/user-tasks/65fa123456789abcdef00001 \
+  -H "Authorization: Bearer ADMIN_TOKEN"
+```
+
+**Notes:**
+- ⚠️ Endpoint parameter là `taskId` = **userTaskId** (không phải storeTaskId)
+- UserTask document bị xóa hoàn toàn
+- StoreTask completion rate được recalculate
+- Employee nhận notification task bị cancelled
 
 ---
 
@@ -378,50 +1249,581 @@ The following endpoints were **removed** because Brand data is managed by extern
 **Controller:** `src/controllers/userTaskController.js`  
 **Validators:** `src/validators/userTaskValidator.js`
 
+---
+
 ### GET /api/my-tasks
-- **Description:** Get all tasks assigned to current employee
-- **Access:** Private (Employee)
-- **Middleware:** `authenticate`, `authorize('employee')`
-- **Validator:** `validateGetMyTasks`
-- **Controller:** `getMyTasks()`
-- **Query Params:**
-  - `status` - Filter by status
-  - `page`, `limit` - Pagination
+
+**Mô tả:** Lấy danh sách tasks của employee hiện tại
+
+**Access:** 🔒 Employee only  
+**Business Logic:** [01-BUSINESS-LOGIC.md § UserTask Workflow](01-BUSINESS-LOGIC.md#4-usertask-workflow)
+
+**Request:**
+
+```http
+GET /api/my-tasks?status=in_progress&page=1&limit=20 HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer {EMPLOYEE_TOKEN}
+```
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `status` | string | ❌ No | Filter: 'pending' \| 'in_progress' \| 'submitted' \| 'approved' \| 'rejected' |
+| `page` | number | ❌ No | Page number (default: 1) |
+| `limit` | number | ❌ No | Items per page (default: 20) |
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "tasks": [
+      {
+        "_id": "65fa123456789abcdef00001",
+        "broadcastId": {
+          "_id": "65f9876543210fedcba98765",
+          "title": "Kiểm tra vệ sinh tháng 3"
+        },
+        "storeTaskId": "65f9876543210fedcba98766",
+        "employeeId": "65f1234567890abcdef12346",
+        "status": "in_progress",
+        "priority": "high",
+        "deadline": "2026-03-31T23:59:59.000Z",
+        "checklist": [
+          {
+            "title": "Lau sàn nhà",
+            "description": "Lau sạch toàn bộ sàn",
+            "required": true,
+            "completed": false
+          },
+          {
+            "title": "Chụp ảnh",
+            "required": true,
+            "completed": false
+          }
+        ],
+        "progress": 0,
+        "evidences": [],
+        "assignedAt": "2026-03-20T08:00:00.000Z",
+        "startedAt": "2026-03-20T09:00:00.000Z",
+        "isOverdue": false
+      }
+    ],
+    "pagination": {
+      "currentPage": 1,
+      "totalPages": 2,
+      "totalItems": 35,
+      "itemsPerPage": 20
+    },
+    "summary": {
+      "pending": 5,
+      "in_progress": 10,
+      "submitted": 3,
+      "approved": 15,
+      "rejected": 2,
+      "overdue": 1
+    }
+  }
+}
+```
+
+**Response 403 (Not Employee Role):**
+
+```json
+{
+  "success": false,
+  "message": "Chỉ nhân viên mới có quyền xem tasks của mình"
+}
+```
+
+**Implementation:**
+- File: `src/controllers/userTaskController.js`
+- Function: `getMyTasks()`
+
+**cURL Example:**
+
+```bash
+curl -X GET "http://localhost:5000/api/my-tasks?status=in_progress" \
+  -H "Authorization: Bearer EMPLOYEE_TOKEN"
+```
+
+**Notes:**
+- Chỉ trả về tasks của employee hiện tại (filter by req.user._id)
+- Tasks được populate với broadcast info
+- `isOverdue` được computed dựa trên deadline
+- `progress` = % checklist items completed
+
+---
 
 ### GET /api/my-tasks/:id
-- **Description:** Get task details by ID
-- **Access:** Private (Employee)
-- **Middleware:** `authenticate`, `authorize('employee')`
-- **Validator:** `validateGetTaskById`
-- **Controller:** `getTaskById()`
-- **Params:** `id` - UserTask ObjectId
+
+**Mô tả:** Lấy chi tiết 1 task của employee
+
+**Access:** 🔒 Employee only (own task)  
+**Business Logic:** [01-BUSINESS-LOGIC.md § UserTask Workflow](01-BUSINESS-LOGIC.md#4-usertask-workflow)
+
+**Request:**
+
+```http
+GET /api/my-tasks/65fa123456789abcdef00001 HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer {EMPLOYEE_TOKEN}
+```
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "65fa123456789abcdef00001",
+    "broadcastId": {
+      "_id": "65f9876543210fedcba98765",
+      "title": "Kiểm tra vệ sinh tháng 3",
+      "description": "Kiểm tra và đảm bảo vệ sinh toàn bộ cửa hàng",
+      "priority": "high",
+      "attachments": [
+        {
+          "url": "https://example.com/guide.pdf",
+          "filename": "huong-dan-ve-sinh.pdf",
+          "type": "document"
+        }
+      ]
+    },
+    "storeTaskId": {
+      "_id": "65f9876543210fedcba98766",
+      "storeId": {
+        "_id": "65f1234567890abcdef11111",
+        "Ten_thuong_hieu": "Chi nhánh HCM"
+      }
+    },
+    "employeeId": {
+      "_id": "65f1234567890abcdef12346",
+      "Ho_ten": "Nguyễn Văn B",
+      "So_dien_thoai": "0987654322"
+    },
+    "status": "in_progress",
+    "priority": "high",
+    "deadline": "2026-03-31T23:59:59.000Z",
+    "checklist": [
+      {
+        "title": "Lau sàn nhà",
+        "description": "Lau sạch toàn bộ sàn, đặc biệt chú ý góc khuất",
+        "required": true,
+        "completed": false
+      },
+      {
+        "title": "Chụp ảnh sau khi hoàn thành",
+        "required": true,
+        "completed": false
+      }
+    ],
+    "progress": 0,
+    "evidences": [],
+    "assignedAt": "2026-03-20T08:00:00.000Z",
+    "startedAt": "2026-03-20T09:00:00.000Z",
+    "submittedAt": null,
+    "completedAt": null,
+    "isOverdue": false,
+    "daysUntilDeadline": 11
+  }
+}
+```
+
+**Response 403 (Not Own Task):**
+
+```json
+{
+  "success": false,
+  "message": "Bạn không có quyền xem task này"
+}
+```
+
+**Response 404 (Task Not Found):**
+
+```json
+{
+  "success": false,
+  "message": "Không tìm thấy task"
+}
+```
+
+**Implementation:**
+- File: `src/controllers/userTaskController.js`
+- Function: `getTaskById()`
+
+**cURL Example:**
+
+```bash
+curl -X GET http://localhost:5000/api/my-tasks/65fa123456789abcdef00001 \
+  -H "Authorization: Bearer EMPLOYEE_TOKEN"
+```
+
+**Notes:**
+- Validate employee chỉ xem được own tasks
+- Full populate: broadcast, storeTask, store info
+- `daysUntilDeadline` computed từ current date
+- Attachments từ broadcast được include
+
+---
 
 ### PUT /api/my-tasks/:id/checklist
-- **Description:** Update checklist items
-- **Access:** Private (Employee)
-- **Middleware:** `authenticate`, `authorize('employee')`
-- **Validator:** `validateUpdateChecklist`
-- **Controller:** `updateChecklist()`
-- **Params:** `id` - UserTask ObjectId
-- **Body:** `{ checklist }` - Updated checklist array
+
+**Mô tả:** Update checklist items (mark completed/uncompleted)
+
+**Access:** 🔒 Employee only (own task)  
+**Business Logic:** [01-BUSINESS-LOGIC.md § UserTask Workflow](01-BUSINESS-LOGIC.md#4-usertask-workflow)
+
+**Request:**
+
+```http
+PUT /api/my-tasks/65fa123456789abcdef00001/checklist HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer {EMPLOYEE_TOKEN}
+Content-Type: application/json
+
+{
+  "checklist": [
+    {
+      "title": "Lau sàn nhà",
+      "description": "Lau sạch toàn bộ sàn",
+      "required": true,
+      "completed": true
+    },
+    {
+      "title": "Chụp ảnh",
+      "required": true,
+      "completed": false
+    }
+  ]
+}
+```
+
+**Request Body:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `checklist` | array | ✅ Yes | Full checklist array với updates |
+
+**Validation:**
+- Employee phải own task này
+- Task phải có status: 'in_progress' hoặc 'rejected'
+- Không sửa được checklist của task đã submitted/approved
+- Checklist array phải match số lượng items gốc
+
+**Process:**
+1. Validate ownership và status
+2. Update checklist items
+3. Recalculate progress (% completed)
+4. Save UserTask
+5. Update StoreTask completion rate
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "message": "Checklist đã được cập nhật",
+  "data": {
+    "_id": "65fa123456789abcdef00001",
+    "checklist": [...],
+    "progress": 50,
+    "completedItems": 1,
+    "totalItems": 2
+  }
+}
+```
+
+**Response 400 (Cannot Update):**
+
+```json
+{
+  "success": false,
+  "message": "Không thể update checklist của task đã submitted"
+}
+```
+
+**Response 403 (Not Own Task):**
+
+```json
+{
+  "success": false,
+  "message": "Bạn không có quyền update task này"
+}
+```
+
+**Implementation:**
+- File: `src/controllers/userTaskController.js`
+- Function: `updateChecklist()`
+
+**cURL Example:**
+
+```bash
+curl -X PUT http://localhost:5000/api/my-tasks/65fa123456789abcdef00001/checklist \
+  -H "Authorization: Bearer EMPLOYEE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "checklist": [
+      {"title": "Lau sàn", "required": true, "completed": true},
+      {"title": "Chụp ảnh", "required": true, "completed": false}
+    ]
+  }'
+```
+
+**Notes:**
+- Progress tự động recalculate
+- StoreTask completion rate cũng được update
+- Chỉ update được khi task đang in_progress hoặc rejected
+
+---
 
 ### POST /api/my-tasks/:id/evidence
-- **Description:** Add evidence files to task
-- **Access:** Private (Employee)
-- **Middleware:** `authenticate`, `authorize('employee')`
-- **Validator:** `validateUploadEvidence`
-- **Controller:** `uploadEvidence()`
-- **Params:** `id` - UserTask ObjectId
-- **Body:** `{ evidences }` - Array of evidence objects (url, type, filename)
+
+**Mô tả:** Upload evidence (photos/videos) cho task
+
+**Access:** 🔒 Employee only (own task)  
+**Business Logic:** [01-BUSINESS-LOGIC.md § UserTask Workflow](01-BUSINESS-LOGIC.md#4-usertask-workflow)
+
+**Request:**
+
+```http
+POST /api/my-tasks/65fa123456789abcdef00001/evidence HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer {EMPLOYEE_TOKEN}
+Content-Type: application/json
+
+{
+  "evidences": [
+    {
+      "url": "https://example.com/uploads/proof1.jpg",
+      "filename": "san-nha-sau-khi-lau.jpg",
+      "type": "image",
+      "uploadedAt": "2026-03-20T10:00:00.000Z"
+    },
+    {
+      "url": "https://example.com/uploads/video1.mp4",
+      "filename": "qua-trinh-ve-sinh.mp4",
+      "type": "video",
+      "uploadedAt": "2026-03-20T10:05:00.000Z"
+    }
+  ]
+}
+```
+
+**Request Body:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `evidences` | array | ✅ Yes | Array of evidence objects |
+
+**Evidence Object Schema:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `url` | string | ✅ Yes | Public URL của file (from /api/upload) |
+| `filename` | string | ✅ Yes | Original filename |
+| `type` | string | ✅ Yes | 'image' \| 'video' \| 'document' |
+| `uploadedAt` | Date | ❌ No | Upload timestamp (auto if not provided) |
+
+**Validation:**
+- Employee phải own task
+- Task phải có status: 'in_progress' hoặc 'rejected'
+- URLs phải valid
+- Type phải thuộc ['image', 'video', 'document']
+
+**Process:**
+1. Validate ownership
+2. Validate evidence objects
+3. Append evidences vào existing array (không replace)
+4. Save UserTask
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "message": "Evidence đã được thêm",
+  "data": {
+    "_id": "65fa123456789abcdef00001",
+    "evidences": [
+      {
+        "url": "https://example.com/uploads/proof1.jpg",
+        "filename": "san-nha-sau-khi-lau.jpg",
+        "type": "image",
+        "uploadedAt": "2026-03-20T10:00:00.000Z"
+      },
+      {
+        "url": "https://example.com/uploads/video1.mp4",
+        "filename": "qua-trinh-ve-sinh.mp4",
+        "type": "video",
+        "uploadedAt": "2026-03-20T10:05:00.000Z"
+      }
+    ],
+    "totalEvidences": 2
+  }
+}
+```
+
+**Response 400 (Invalid Evidence):**
+
+```json
+{
+  "success": false,
+  "message": "Evidence không hợp lệ",
+  "errors": [
+    "URL không được để trống",
+    "Type phải là image, video hoặc document"
+  ]
+}
+```
+
+**Response 403 (Not Own Task):**
+
+```json
+{
+  "success": false,
+  "message": "Bạn không có quyền upload evidence cho task này"
+}
+```
+
+**Implementation:**
+- File: `src/controllers/userTaskController.js`
+- Function: `uploadEvidence()`
+
+**cURL Example:**
+
+```bash
+curl -X POST http://localhost:5000/api/my-tasks/65fa123456789abcdef00001/evidence \
+  -H "Authorization: Bearer EMPLOYEE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "evidences": [
+      {
+        "url": "https://example.com/uploads/proof1.jpg",
+        "filename": "proof.jpg",
+        "type": "image"
+      }
+    ]
+  }'
+```
+
+**Notes:**
+- Files phải được upload trước qua `/api/upload` endpoints
+- Evidence array append, không replace existing evidences
+- Có thể upload nhiều evidences trong 1 request
+- Employee có thể xóa evidence bằng cách gửi full array mới (không có API riêng để xóa)
+
+---
 
 ### POST /api/my-tasks/:id/submit
-- **Description:** Submit task for review
-- **Access:** Private (Employee)
-- **Middleware:** `authenticate`, `authorize('employee')`
-- **Validator:** `validateSubmitTask`
-- **Controller:** `submitTask()`
-- **Params:** `id` - UserTask ObjectId
-- **Note:** All required checklist items must be completed
+
+**Mô tả:** Submit task để manager review (all required checklist items must be completed)
+
+**Access:** 🔒 Employee only (own task)  
+**Business Logic:** [01-BUSINESS-LOGIC.md § UserTask Workflow](01-BUSINESS-LOGIC.md#4-usertask-workflow)
+
+**Request:**
+
+```http
+POST /api/my-tasks/65fa123456789abcdef00001/submit HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer {EMPLOYEE_TOKEN}
+```
+
+**Validation:**
+- Employee phải own task
+- Task phải có status: 'in_progress' hoặc 'rejected'
+- **Tất cả required checklist items phải completed = true**
+- Phải có ít nhất 1 evidence (tùy config broadcast)
+
+**Process:**
+1. Validate ownership
+2. Check all required checklist items completed
+3. Check evidences exist (nếu required)
+4. Update task status → 'submitted'
+5. Set submittedAt timestamp
+6. Create notification cho manager
+7. Update StoreTask status (nếu cần)
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "message": "Task đã được submit để review",
+  "data": {
+    "_id": "65fa123456789abcdef00001",
+    "status": "submitted",
+    "submittedAt": "2026-03-20T14:30:00.000Z",
+    "progress": 100,
+    "nextStep": "Chờ manager review"
+  }
+}
+```
+
+**Response 400 (Required Items Not Done):**
+
+```json
+{
+  "success": false,
+  "message": "Chưa hoàn thành đủ checklist items",
+  "errors": [
+    "Item 'Chụp ảnh sau khi hoàn thành' (required) chưa hoàn thành"
+  ],
+  "incompleteItems": [
+    {
+      "title": "Chụp ảnh sau khi hoàn thành",
+      "required": true,
+      "completed": false
+    }
+  ]
+}
+```
+
+**Response 400 (No Evidence):**
+
+```json
+{
+  "success": false,
+  "message": "Phải upload ít nhất 1 evidence (ảnh/video) trước khi submit"
+}
+```
+
+**Response 403 (Not Own Task):**
+
+```json
+{
+  "success": false,
+  "message": "Bạn không có quyền submit task này"
+}
+```
+
+**Implementation:**
+- File: `src/controllers/userTaskController.js`
+- Function: `submitTask()`
+
+**cURL Example:**
+
+```bash
+curl -X POST http://localhost:5000/api/my-tasks/65fa123456789abcdef00001/submit \
+  -H "Authorization: Bearer EMPLOYEE_TOKEN"
+```
+
+**Notes:**
+- Submit chỉ thành công khi:
+  - ✅ All required checklist items completed
+  - ✅ Có evidences (nếu broadcast require)
+  - ✅ Task đang in_progress hoặc rejected
+- Sau khi submit:
+  - Status → 'submitted'
+  - Manager nhận notification
+  - Employee không edit được task nữa (chờ review)
+- Nếu manager reject:
+  - Status → 'rejected'
+  - Employee phải fix và submit lại
 
 ---
 
