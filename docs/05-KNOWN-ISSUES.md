@@ -1,6 +1,7 @@
-# 04 - AUDIT CÁC VẤN ĐỀ ĐÃ BIẾT
+# 05 - AUDIT CÁC VẤN ĐỀ ĐÃ BIẾT
 
 **Ngày audit:** 19/03/2026  
+**Cập nhật cuối:** 20/03/2026 (Phase 6)  
 **Mục đích:** Ghi chép tất cả bugs, workarounds, technical debt  
 **Phạm vi:** Toàn bộ codebase
 
@@ -8,15 +9,15 @@
 
 ## 📊 TỔNG QUAN
 
-**Tổng số vấn đề:** 12
+**Tổng số vấn đề:** 14
 - ✅ Đã sửa: 4
-- ⚠️ Known Issues: 5
-- 🔧 Technical Debt: 3
+- ⚠️ Known Issues: 6
+- 🔧 Technical Debt: 4
 
 **Mức độ ưu tiên:**
-- 🔴 CRITICAL: 0
+- 🔴 CRITICAL: 1 (DevTools - chỉ critical nếu production)
 - 🟡 HIGH: 2
-- 🟢 MEDIUM: 7
+- 🟢 MEDIUM: 8
 - ⚪ LOW: 3
 
 ---
@@ -249,8 +250,14 @@ await StoreTask.findByIdAndUpdate(oldStoreTask, {
 **Fields có nguy cơ:**
 - Broadcast: title, description
 - UserTask: overallNote
-- Review: reviewNote
+- Review: reviewNote, reason (reject)
 - StoreTask: rejectedReason
+
+**Endpoints cần sanitization:**
+- [POST /api/broadcasts](03-API-REFERENCE.md#post-apibroadcasts) - title, description
+- [POST /api/reviews/:taskId/approve](03-API-REFERENCE.md#post-apireviewstaskidapprove) - reviewNote
+- [POST /api/reviews/:taskId/reject](03-API-REFERENCE.md#post-apireviewstaskidreject) - reason
+- [PUT /api/store-tasks/:id/reject](03-API-REFERENCE.md#put-apistoretasksidreject) - rejectedReason
 
 **Giải pháp đề xuất:**
 1. Cài đặt `validator` hoặc `xss` package
@@ -279,13 +286,22 @@ const xss = require('xss');
 - APIs có thể bị spam/brute force
 - Đặc biệt nguy hiểm cho:
   - POST /api/auth/login (brute force password)
-  - POST /api/upload (spam file uploads)
+  - POST /api/upload/* (spam file uploads - 6 endpoints)
   - POST /api/broadcasts/:id/assign (tạo nhiều tasks)
+
+**Endpoints bị ảnh hưởng:**
+- [POST /api/upload](03-API-REFERENCE.md#post-apiupload) - Single file
+- [POST /api/upload/multiple](03-API-REFERENCE.md#post-apiuploadmultiple) - Max 10 files
+- [POST /api/upload/photo](03-API-REFERENCE.md#post-apiuploadphoto) - Image only
+- [POST /api/upload/photos](03-API-REFERENCE.md#post-apiuploadphotos) - Max 5 photos
+- [POST /api/upload/video](03-API-REFERENCE.md#post-apiuploadvideo) - Max 50MB
+- [POST /api/upload/document](03-API-REFERENCE.md#post-apiuploaddocument) - PDF only
 
 **Tác động:**
 - Dễ bị DDoS attack
 - Server overload
 - Database overload
+- Storage space exhaustion (upload spam)
 
 **Giải pháp đề xuất:**
 1. Cài đặt `express-rate-limit`
@@ -435,6 +451,59 @@ notificationSchema.index({ userId: 1, isRead: 1 });
 
 ---
 
+### 14. DevTools endpoints exposed in production 🔴
+
+**Ngày phát hiện:** 20/03/2026 (Phase 5 documentation)  
+**Mức độ:** 🔴 CRITICAL (nếu deploy production)
+
+**Mô tả vấn đề:**
+- Có 2 endpoints DevTools bypass authentication hoàn toàn
+- Được tạo cho development testing
+- Nếu không disable trong production → CRITICAL SECURITY RISK
+
+**Endpoints nguy hiểm:**
+- [GET /api/dev/accounts](03-API-REFERENCE.md#get-apidevaccounts) - List test accounts (password exposed)
+- [POST /api/dev/quick-login](03-API-REFERENCE.md#post-apidevquick-login) - Login without password
+
+**Tác động:**
+- Bất kỳ ai có thể login vào bất kỳ tài khoản nào
+- Không cần password
+- Lộ credentials của test accounts
+- Complete authentication bypass
+
+**Giải pháp đề xuất:**
+1. **Option 1 (Recommended):** Xóa routes khỏi production build
+   ```javascript
+   // src/routes/index.js
+   if (process.env.NODE_ENV === 'development') {
+     app.use('/api/dev', devToolsRoutes);
+   }
+   ```
+
+2. **Option 2:** Middleware check environment
+   ```javascript
+   // devToolsRoutes.js
+   router.use((req, res, next) => {
+     if (process.env.NODE_ENV !== 'development') {
+       return res.status(403).json({ message: 'DevTools disabled in production' });
+     }
+     next();
+   });
+   ```
+
+3. **Option 3:** Remove routes completely from production codebase
+
+**Files cần sửa:**
+- `src/routes/devToolsRoutes.js` - Add environment check
+- `src/routes/index.js` - Conditional registration
+- `.env.production` - Set NODE_ENV=production
+
+**Ước tính effort:** 30 phút - 1 giờ
+
+**Ưu tiên:** 🔴 MUST FIX before production deployment
+
+---
+
 ## 📋 WORKAROUNDS HIỆN TẠI
 
 ### Workaround 1: Manager phải assign thủ công broadcast recurring
@@ -488,13 +557,16 @@ notificationSchema.index({ userId: 1, isRead: 1 });
 
 | Mức độ | Đã sửa | Chưa sửa | Tổng |
 |--------|--------|----------|------|
-| 🔴 CRITICAL | 2 | 0 | 2 |
+| 🔴 CRITICAL | 2 | 1 | 3 |
 | 🟡 HIGH | 2 | 2 | 4 |
-| 🟢 MEDIUM | 0 | 5 | 5 |
+| 🟢 MEDIUM | 0 | 6 | 6 |
 | ⚪ LOW | 0 | 3 | 3 |
-| **TỔNG** | **4** | **10** | **14** |
+| **TỔNG** | **4** | **12** | **16** |
 
 ### Roadmap sửa lỗi đề xuất:
+
+**Sprint 0 (Trước Production):**
+- #14: Disable DevTools in production (CRITICAL) - 30 phút
 
 **Sprint 1 (Week 1):**
 - #13: Setup tests infrastructure (HIGH)
@@ -511,7 +583,7 @@ notificationSchema.index({ userId: 1, isRead: 1 });
 - #11: Standardize validators (LOW)
 - #12: Add Swagger documentation (LOW)
 
-**Tổng effort ước tính:** 50-70 giờ (~2-3 tuần với 1 developer)
+**Tổng effort ước tính:** 52-72 giờ (~2-3 tuần với 1 developer)
 
 ---
 

@@ -1,8 +1,8 @@
 # Implementation Status - Tình Trạng Triển Khai
 
-> **Last Updated:** 19/03/2026  
-> **Phase:** Post-Audit (sau Phase 1)  
-> **Overall Progress:** 75% Core Features Working
+> **Last Updated:** 20/03/2026  
+> **Phase:** Post-Phase 5 (API Documentation Complete)  
+> **Overall Progress:** 93% Core Features Working, 100% Documentation Complete
 
 ## Mục Lục
 
@@ -29,12 +29,13 @@
 | **Dashboard** | 5 | 4 | 1 | 0 | 1 |
 | **Read-Only APIs** | 7 | 7 | 0 | 0 | 0 |
 | **Notifications** | 4 | 3 | 1 | 0 | 1 |
-| **Uploads** | 3 | 3 | 0 | 0 | 0 |
+| **Uploads** | 6 | 6 | 0 | 0 | 0 |
+| **DevTools** | 2 | 2 | 0 | 0 | 0 |
 | **Testing** | - | 0 | - | 0 | 1 |
 | **Documentation** | - | 1 | - | 0 | 0 |
-| **TOTAL** | **59** | **55** | **5** | **0** | **8** |
+| **TOTAL** | **64** | **60** | **5** | **0** | **8** |
 
-### Health Score: 🟢 93% (55/59 features working)
+### Health Score: 🟢 94% (60/64 features working)
 
 ---
 
@@ -218,15 +219,39 @@
 
 ### 9. File Uploads
 
-| Feature | Status | Endpoint | Notes |
-|---------|--------|----------|-------|
-| Upload Image | ✅ Done | `POST /api/uploads/image` | Multer + validation |
-| Upload File | ✅ Done | `POST /api/uploads/file` | PDF, DOCX allowed |
-| Get File URL | ✅ Done | `GET /api/uploads/:filename` | Returns public URL |
+| Feature | Status | Endpoint | Notes | Bug # |
+|---------|--------|----------|-------|-------|
+| Upload Single File | ✅ Done | `POST /api/upload` | Any type, max 50MB | - |
+| Upload Multiple Files | ✅ Done | `POST /api/upload/multiple` | Max 10 files | - |
+| Upload Photo | ✅ Done | `POST /api/upload/photo` | Image only, max 10MB | - |
+| Upload Photos | ✅ Done | `POST /api/upload/photos` | Max 5 photos for evidence | - |
+| Upload Video | ✅ Done | `POST /api/upload/video` | Max 50MB, optional transcoding | - |
+| Upload Document | ✅ Done | `POST /api/upload/document` | PDF only, max 5MB | - |
 
 **Overall:** ✅ 100% Working
 
-**Docs Reference:** [01-BUSINESS-LOGIC.md](01-BUSINESS-LOGIC.md#9-file-uploads)
+**Known Issues:**
+- [#8](05-KNOWN-ISSUES.md#8-không-có-rate-limiting) - Không có rate limiting (cần thêm)
+
+**Docs Reference:** [03-API-REFERENCE.md § Upload](03-API-REFERENCE.md#upload)
+
+---
+
+### 10. DevTools (Development Only)
+
+| Feature | Status | Endpoint | Notes | Warning |
+|---------|--------|----------|-------|---------|
+| Account Switcher | ✅ Done | `GET /api/dev/accounts` | List test accounts by role | 🔴 MUST be 403 in production |
+| Quick Login | ✅ Done | `POST /api/dev/quick-login` | Bypass auth for testing | 🔴 CRITICAL: Disable in production |
+
+**Overall:** ✅ 100% Working (Development Environment Only)
+
+**Security Warnings:**
+- **CRITICAL:** These endpoints bypass authentication and MUST return 403 in production
+- DevTools routes should be removed or disabled in production builds
+- Only for local development and testing environments
+
+**Docs Reference:** [03-API-REFERENCE.md § DevTools](03-API-REFERENCE.md#devtools)
 
 ---
 
@@ -380,22 +405,23 @@
 
 | Category | Working | Buggy | Missing | Total |
 |----------|---------|-------|---------|-------|
-| **Core Features** | 55 | 5 | 0 | 60 |
+| **Core Features** | 60 | 5 | 0 | 65 |
 | **Infrastructure** | 4 | 2 | 4 | 10 |
 | **Security** | 3 | 0 | 4 | 7 |
 | **Performance** | 1 | 1 | 2 | 4 |
 | **Testing** | 0 | 0 | 4 | 4 |
-| **TOTAL** | **63** | **8** | **14** | **85** |
+| **TOTAL** | **68** | **8** | **14** | **90** |
 
-**Overall Completion:** 74% (63/85)
+**Overall Completion:** 76% (68/90)
 
 ---
 
 ## Version History
 
 - **v1.0** (19/03/2026): Initial status tracking post-Phase 1 audit
-- 4 critical bugs fixed (18-19/03)
-- Documentation restructure complete
+- **v1.1** (18-19/03/2026): 4 critical bugs fixed
+- **v1.2** (20/03/2026): Phase 5 complete - All 46 API endpoints documented
+- **v1.3** (20/03/2026): Phase 6 update - Upload & DevTools features added to tracking
 
 ---
 
