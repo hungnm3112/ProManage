@@ -2,8 +2,12 @@
  * Brand Routes
  * API endpoints for Brand/Store management
  * 
+ * ⛔ READ-ONLY: Brand (Branch) collection synced from external system
+ * Only GET operations allowed - no CREATE/UPDATE/DELETE
+ * 
  * Author: ProManage Team
  * Date: March 16, 2026
+ * Updated: March 19, 2026 - Removed write operations
  */
 
 const express = require('express');
@@ -50,32 +54,6 @@ router.get(
   authorize('admin', 'manager'),
   brandValidator.validateGetBrandEmployees,
   brandController.getBrandEmployees
-);
-
-/**
- * @route   PUT /api/brands/:id
- * @desc    Update brand information
- * @access  Private (admin only)
- */
-router.put(
-  '/:id',
-  authenticate,
-  authorize('admin'),
-  brandValidator.validateUpdateBrand,
-  brandController.updateBrand
-);
-
-/**
- * @route   PATCH /api/brands/:id/manager
- * @desc    Assign manager to a brand
- * @access  Private (admin only)
- */
-router.patch(
-  '/:id/manager',
-  authenticate,
-  authorize('admin'),
-  brandValidator.validateAssignManager,
-  brandController.assignManager
 );
 
 module.exports = router;

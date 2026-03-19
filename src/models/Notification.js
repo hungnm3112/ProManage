@@ -10,7 +10,7 @@ const notificationSchema = new mongoose.Schema({
   // User who receives the notification
   userId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Nhan_vien',
+    ref: 'Employee',
     required: true,
     index: true
   },
@@ -62,7 +62,7 @@ const notificationSchema = new mongoose.Schema({
     },
     employeeId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Nhan_vien'
+      ref: 'Employee'
     }
   },
 

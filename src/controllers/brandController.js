@@ -161,165 +161,21 @@ const getBrandEmployees = async (req, res) => {
 };
 
 /**
- * @route   PUT /api/brands/:id
- * @desc    Update brand information
- * @access  Private (admin only)
+ * ⛔ READ-ONLY COLLECTION
+ * 
+ * Brand (Branch) collection is synced from external system.
+ * ProManage can ONLY READ data.
+ * CREATE/UPDATE/DELETE operations are NOT allowed.
+ * 
+ * Removed operations (March 19, 2026):
+ * - updateBrand (PUT)
+ * - assignManager (PATCH)
+ * 
+ * Reason: Data managed by external system
  */
-const updateBrand = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const allowedUpdates = [
-      'Name',
-      'Map_Address',
-      'Phone',
-      'Image',
-      'WifiAddress',
-      'Icon',
-      'HeaderContent',
-      'CheckIn',
-      'CheckOut',
-      'LateIn',
-      'OutOvertime',
-      'Active',
-      'Phone_Customer_Support',
-      'Phone_Feedback',
-      'Link_Description',
-      'Active_Schedule',
-      'PercentPayment'
-    ];
-    
-    // Filter out fields not in allowedUpdates
-    const updates = {};
-    Object.keys(req.body).forEach(key => {
-      if (allowedUpdates.includes(key)) {
-        updates[key] = req.body[key];
-      }
-    });
-    
-    // Check if there are any updates
-    if (Object.keys(updates).length === 0) {
-      return sendError(res, 'No valid update fields provided', 400);
-    }
-    
-    // Update brand
-    const brand = await Brand.findByIdAndUpdate(
-      id,
-      { $set: updates },
-      { new: true, runValidators: true }
-    )
-      .select('-__v')
-      .lean();
-    
-    if (!brand) {
-      return sendError(res, 'Brand not found', 404);
-    }
-    
-    return sendSuccess(res, 'Brand updated successfully', { brand });
-  } catch (error) {
-    console.error('updateBrand error:', error);
-    
-    if (error.name === 'ValidationError') {
-      return sendError(res, error.message, 400);
-    }
-    
-    return sendError(res, error.message, 500);
-  }
-};
-
-/**
- * @route   PATCH /api/brands/:id/manager
- * @desc    Assign manager to a brand
- * @access  Private (admin only)
- * @body    {string} employeeId - ID of employee to assign as manager
- */
-const assignManager = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { employeeId } = req.body;
-    
-    // Validate employeeId
-    if (!employeeId) {
-      return sendError(res, 'Employee ID is required', 400);
-    }
-    
-    // Check if brand exists
-    const brand = await Brand.findById(id);
-    if (!brand) {
-      return sendError(res, 'Brand not found', 404);
-    }
-    
-    // Check if employee exists
-    const employee = await Employee.findById(employeeId).populate('ID_GroupUser');
-    if (!employee) {
-      return sendError(res, 'Employee not found', 404);
-    }
-    
-    // Check if employee is active
-    if (employee.Status !== 'Đang hoạt động') {
-      return sendError(res, 'Employee must be active to be assigned as manager', 400);
-    }
-    
-    // Check if employee has manager role
-    const employeeRole = await getEmployeeRole(employee);
-    if (employeeRole !== 'manager') {
-      return sendError(res, 'Employee must have manager role to be assigned as manager', 400);
-    }
-    
-    // Check if this employee is already a manager of another branch
-    if (employee.ID_Branch && employee.ID_Branch.toString() !== id) {
-      // Find if there's another manager at the previous branch
-      const previousBranchManagers = await Employee.find({
-        ID_Branch: employee.ID_Branch,
-        Status: 'Đang hoạt động',
-        _id: { $ne: employeeId }
-      });
-      
-      let hasOtherManager = false;
-      for (const emp of previousBranchManagers) {
-        const role = await getEmployeeRole(emp);
-        if (role === 'manager') {
-          hasOtherManager = true;
-          break;
-        }
-      }
-      
-      if (!hasOtherManager) {
-        return sendError(
-          res,
-          'Cannot reassign this manager. Their current branch has no other managers.',
-          400
-        );
-      }
-    }
-    
-    // Update employee's branch
-    employee.ID_Branch = id;
-    await employee.save();
-    
-    // Populate the updated employee
-    const updatedEmployee = await Employee.findById(employeeId)
-      .populate('ID_GroupUser', 'GroupName')
-      .populate('ID_Branch', 'Name')
-      .select('-Password -Salt -__v')
-      .lean();
-    
-    return sendSuccess(res, 'Manager assigned successfully', {
-      brand: {
-        _id: brand._id,
-        Name: brand.Name
-      },
-      manager: updatedEmployee
-    });
-  } catch (error) {
-    console.error('assignManager error:', error);
-    return sendError(res, error.message, 500);
-  }
-};
 
 module.exports = {
   getBrands,
   getBrandById,
-  getBrandEmployees,
-  updateBrand,
-  assignManager
+  getBrandEmployees
 };
