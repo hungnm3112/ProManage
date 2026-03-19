@@ -7,13 +7,6 @@ và project tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
-### Added
-- **FEATURE-CHECKLIST.md**: Template đầy đủ cho feature development
-  - Checklist 6 bước chi tiết
-  - Example walkthrough (Schedule Broadcast)
-  - Debug scenarios và solutions
-  - Time tracking template
-
 ### Planned
 - Unit tests cho tất cả endpoints
 - Recurring broadcasts auto-publish
@@ -23,6 +16,86 @@ và project tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 - JWT refresh token mechanism
 - Swagger API documentation
 - Console.log cleanup
+- DevTools security fix (disable in production)
+
+---
+
+## [2.1.0] - 2026-03-20
+
+### 🎉 Major: Documentation Enhancement Complete
+
+#### Added
+- **Phase 5 Complete**: Enhanced all 46 API endpoints to full format
+  - Full HTTP request/response examples for every endpoint
+  - JSON schemas with parameter tables
+  - Validation rules chi tiết
+  - All error codes (400, 401, 403, 404) documented
+  - Implementation details (file, function references)
+  - cURL examples ready-to-use
+  - Critical warnings and technical debt notes
+  - Cross-references between docs
+  
+- **Upload Endpoints** (6 endpoints fully documented):
+  - POST /api/upload - Single file upload (max 50MB)
+  - POST /api/upload/multiple - Max 10 files
+  - POST /api/upload/photo - Image only (max 10MB)
+  - POST /api/upload/photos - Max 5 photos for evidence
+  - POST /api/upload/video - Max 50MB with transcoding
+  - POST /api/upload/document - PDF only (max 5MB)
+  
+- **DevTools Endpoints** (2 endpoints with CRITICAL warnings):
+  - GET /api/dev/accounts - Account switcher for testing
+  - POST /api/dev/quick-login - Quick login bypass auth
+  - 🔴 CRITICAL security warnings added (must disable in production)
+
+- **Phase 6 Complete**: Updated Implementation Status & Known Issues
+  - Updated feature count: 59 → 64 features
+  - Health score: 93% → 94% (60/64 working)
+  - Added DevTools & Upload categories to tracking
+  - Cross-referenced all issues to API docs
+  - Added Issue #14: DevTools security risk (CRITICAL)
+  - Updated roadmap with Sprint 0 for production security
+
+#### Changed
+- **03-API-REFERENCE.md**: Enhanced 28 additional endpoints
+  - Employees (2 endpoints): Data type warnings, read-only constraints
+  - Brands (3 endpoints): Naming confusion documented
+  - StoreTasks (4 endpoints): Manager authorization, auto behaviors
+  - Reviews (3 endpoints): Approval flow, XSS warnings
+  - Dashboard (4 endpoints): Role-based stats, authorization
+  - Notifications (4 endpoints): Filtering, badge counts
+  - Upload (6 endpoints): File size limits, MIME types, security
+  - DevTools (2 endpoints): Development-only warnings
+  
+- **04-IMPLEMENTATION-STATUS.md**:
+  - Total features: 59 → 64 (+5 from Upload & DevTools)
+  - Working features: 55 → 60 (+5)
+  - Overall completion: 74% → 76%
+  - Added version history tracking (v1.0 → v1.3)
+  
+- **05-KNOWN-ISSUES.md**:
+  - Total issues: 12 → 14 (+2 new)
+  - Added Issue #14: DevTools security (CRITICAL)
+  - Updated Issue #7: XSS with specific endpoints
+  - Updated Issue #8: Rate limiting with 6 upload endpoints
+  - Updated roadmap: 50-70 hrs → 52-72 hrs
+  - Added Sprint 0 for pre-production DevTools fix
+  
+- **02-DATABASE-SCHEMA.md**:
+  - Fixed status consistency for Notification refs bug
+  - Updated Critical Issues section: NOT FIXED → FIXED
+  - Aligned with Recommendations section (both now show FIXED)
+
+#### Technical Rules Applied (Across all 28 new endpoints)
+- **Rule 6**: Data type constraints documented (String booleans, numbers)
+- **Rule 7**: Authorization matrix enforced (Admin/Manager/Employee)
+- **Rule 8**: Technical debt warnings (XSS, Rate Limiting, Tests)
+- **Rule 9**: Auto behaviors documented (Status transitions, notifications)
+
+#### Commits
+- `2bc9a19`: docs: Hoàn thành Phase 5 - Enhanced 46 API endpoints
+- `4872891`: docs: Hoàn thành Phase 6 - Status & Issues tracking
+- `a37b229`: docs: Fix status consistency trong DB schema
 
 ---
 
