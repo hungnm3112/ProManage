@@ -707,26 +707,213 @@ curl -X GET http://localhost:5000/api/auth/me \
 
 **⚠️ CRITICAL:** Employee collection synced from external HR system. **READ ONLY - NO CREATE/UPDATE/DELETE**
 
+---
+
 ### GET /api/employees
-- **Description:** Get all employees with filtering
-- **Access:** Private (Admin, Manager)
-- **Middleware:** `authenticate`, `authorize('admin', 'manager')`
-- **Validator:** `validateGetEmployees`
-- **Controller:** `getEmployees()`
-- **Query Params:** 
-  - `search` - Search by name/phone
-  - `status` - Filter by status
-  - `branchId` - Filter by branch
-  - `role` - Filter by role
-  - `page`, `limit` - Pagination
+
+**Mô tả:** Lấy danh sách tất cả employees với filtering và pagination
+
+**Access:** 🔒 Admin, Manager  
+**Business Logic:** [01-BUSINESS-LOGIC.md § Authentication](01-BUSINESS-LOGIC.md#1-authentication--authorization)
+
+**Request:**
+
+```http
+GET /api/employees?search=nguyen&branchId=65f1234567890abcdef11111&page=1&limit=20 HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer {ADMIN_OR_MANAGER_TOKEN}
+```
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `search` | string | ❌ No | Tìm kiếm theo tên hoặc số điện thoại |
+| `status` | string | ❌ No | Filter: '1' (active) hoặc '0' (inactive) |
+| `branchId` | ObjectId | ❌ No | Filter theo chi nhánh |
+| `role` | string | ❌ No | Filter: 'admin' \| 'manager' \| 'employee' |
+| `page` | number | ❌ No | Số trang (default: 1) |
+| `limit` | number | ❌ No | Items per page (default: 20, max: 100) |
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "employees": [
+      {
+        "_id": "65f1234567890abcdef12345",
+        "Ho_va_ten": "Nguyễn Văn A",
+        "So_dien_thoai": "0987654321",
+        "Email": "nguyenvana@example.com",
+        "ID_Branch": {
+          "_id": "65f1234567890abcdef11111",
+          "Ten_chi_nhanh": "Chi nhánh Quận 1"
+        },
+        "ID_nhom": {
+          "_id": "65f1234567890abcdef22222",
+          "Ten_nhom": "Nhân viên"
+        },
+        "role": "employee",
+        "Trang_thai": "1",
+        "is_timekeeping_all": "true",
+        "Salary": "5000000",
+        "createdAt": "2026-01-15T08:00:00.000Z"
+      }
+    ],
+    "pagination": {
+      "currentPage": 1,
+      "totalPages": 5,
+      "totalItems": 87,
+      "itemsPerPage": 20
+    }
+  }
+}
+```
+
+**Response 403 (Not Authorized):**
+
+```json
+{
+  "success": false,
+  "message": "Chỉ Admin và Manager được xem danh sách employees"
+}
+```
+
+**Implementation:**
+- File: `src/controllers/employeeController.js`
+- Function: `getEmployees()`
+
+**cURL Example:**
+
+```bash
+curl -X GET "http://localhost:5000/api/employees?search=nguyen&page=1&limit=20" \
+  -H "Authorization: Bearer ADMIN_TOKEN"
+```
+
+**Notes:**
+- Manager có thể xem tất cả employees (không giới hạn theo branch của mình)
+- Search hỗ trợ partial match với tên và số điện thoại
+- Results được populate với Branch và GroupUser info
+- Role field được computed từ GroupUser.Ten_nhom
+
+⚠️ **DATA TYPE WARNING (Rule 6):**
+- `Trang_thai`: String "1" (active) hoặc "0" (inactive) - **KHÔNG phải Boolean**
+- `is_timekeeping_all`: String "true"/"false" - **KHÔNG phải Boolean**
+- `Salary`: String "5000000" - **KHÔNG phải Number**
+- **Frontend PHẢI parse** khi cần logic checks hoặc calculations:
+  ```javascript
+  // Check active status
+  const isActive = employee.Trang_thai === "1";  // NOT: if (employee.Trang_thai)
+  
+  // Check timekeeping
+  const canTrackAll = employee.is_timekeeping_all === "true";  // NOT: if (employee.is_timekeeping_all)
+  
+  // Calculate total
+  const salary = parseInt(employee.Salary);  // NOT: employee.Salary + bonus
+  ```
+
+⚠️ **READ-ONLY WARNING (Rule 1):**
+- Employee data synced từ external HR system
+- **KHÔNG có** CREATE/UPDATE/DELETE operations
+- Muốn thay đổi employee info → Phải thay đổi trong HR system
+
+---
 
 ### GET /api/employees/:id
-- **Description:** Get employee by ID
-- **Access:** Private (All authenticated users)
-- **Middleware:** `authenticate`
-- **Validator:** `validateGetEmployeeById`
-- **Controller:** `getEmployeeById()`
-- **Params:** `id` - Employee ObjectId
+
+**Mô tả:** Lấy chi tiết employee theo ID
+
+**Access:** 🔒 Private (All authenticated users)  
+**Business Logic:** [01-BUSINESS-LOGIC.md § Authentication](01-BUSINESS-LOGIC.md#1-authentication--authorization)
+
+**Request:**
+
+```http
+GET /api/employees/65f1234567890abcdef12345 HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer {TOKEN}
+```
+
+**Path Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | ObjectId | ✅ Yes | Employee ObjectId |
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "65f1234567890abcdef12345",
+    "Ho_va_ten": "Nguyễn Văn A",
+    "So_dien_thoai": "0987654321",
+    "Email": "nguyenvana@example.com",
+    "ID_Branch": {
+      "_id": "65f1234567890abcdef11111",
+      "Ten_chi_nhanh": "Chi nhánh Quận 1",
+      "Dia_chi": "123 Nguyễn Huệ, Quận 1",
+      "Active": "true"
+    },
+    "ID_nhom": {
+      "_id": "65f1234567890abcdef22222",
+      "Ten_nhom": "Nhân viên",
+      "Trang_thai": 1
+    },
+    "role": "employee",
+    "Trang_thai": "1",
+    "is_timekeeping_all": "true",
+    "Salary": "5000000",
+    "Allowance": "500000",
+    "createdAt": "2026-01-15T08:00:00.000Z",
+    "updatedAt": "2026-03-10T14:30:00.000Z"
+  }
+}
+```
+
+**Response 404 (Employee Not Found):**
+
+```json
+{
+  "success": false,
+  "message": "Không tìm thấy employee"
+}
+```
+
+**Implementation:**
+- File: `src/controllers/employeeController.js`
+- Function: `getEmployeeById()`
+
+**cURL Example:**
+
+```bash
+curl -X GET http://localhost:5000/api/employees/65f1234567890abcdef12345 \
+  -H "Authorization: Bearer TOKEN"
+```
+
+**Notes:**
+- Tất cả users authenticated đều xem được employee info (không restrict)
+- Response includes full Branch và GroupUser details (populated)
+- Role field computed từ GroupUser.Ten_nhom mapping
+- Dùng cho display employee profile, assign tasks, etc.
+
+⚠️ **DATA TYPE WARNING (Rule 6):**
+- Tất cả numeric fields (`Salary`, `Allowance`) đều là **String**, không phải Number
+- Boolean fields (`is_timekeeping_all`) là **String "true"/"false"**
+- Status fields không nhất quán:
+  - `Employee.Trang_thai`: String "1"/"0"
+  - `Branch.Active`: String "true"/"false"
+  - `GroupUser.Trang_thai`: Number 1/0
+- **PHẢI kiểm tra từng field** để parse đúng
+
+⚠️ **MODEL REFERENCE WARNING (Rule 3):**
+- `ID_Branch` refs to model `'Brand'` (not `'Branch'`!)
+- `ID_nhom` refs to model `'GroupUser'`
+- Populate sử dụng: `.populate('ID_Branch ID_nhom')`
+- Collection names: `Branch` (for Brand), `Group_User` (for GroupUser)
 
 ### ❌ REMOVED OPERATIONS (March 19, 2026)
 
@@ -751,32 +938,291 @@ The following endpoints were **removed** because Employee data is managed by ext
 **⚠️ CRITICAL:** Brand (Branch) collection synced from external ERP system. **READ ONLY - NO CREATE/UPDATE/DELETE**
 
 ### GET /api/brands
-- **Description:** Get all brands with filtering
-- **Access:** Private (All authenticated users)
-- **Middleware:** `authenticate`
-- **Validator:** `validateGetBrands`
-- **Controller:** `getBrands()`
-- **Query Params:** 
-  - `search` - Search by name
-  - `active` - Filter by active status
-  - `page`, `limit` - Pagination
+
+**Mô tả:** Lấy danh sách tất cả brands/stores với filtering và pagination
+
+**Access:** 🔒 Private (All authenticated users)  
+**Business Logic:** [01-BUSINESS-LOGIC.md § Store Management](01-BUSINESS-LOGIC.md#3-storetask-workflow)
+
+**Request:**
+
+```http
+GET /api/brands?search=quận&active=true&page=1&limit=20 HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer {TOKEN}
+```
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `search` | string | ❌ No | Tìm kiếm theo tên chi nhánh |
+| `active` | string | ❌ No | Filter: "true" (active) hoặc "false" (inactive) |
+| `page` | number | ❌ No | Số trang (default: 1) |
+| `limit` | number | ❌ No | Items per page (default: 20, max: 100) |
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "brands": [
+      {
+        "_id": "65f1234567890abcdef11111",
+        "Ten_chi_nhanh": "Chi nhánh Quận 1",
+        "Dia_chi": "123 Nguyễn Huệ, Quận 1, TP.HCM",
+        "Dien_thoai": "0289876543",
+        "Active": "true",
+        "Active_Schedule": "true",
+        "createdAt": "2025-12-01T08:00:00.000Z"
+      },
+      {
+        "_id": "65f1234567890abcdef11112",
+        "Ten_chi_nhanh": "Chi nhánh Quận 3",
+        "Dia_chi": "456 Lê Văn Sỹ, Quận 3, TP.HCM",
+        "Dien_thoai": "0289876544",
+        "Active": "true",
+        "Active_Schedule": "false",
+        "createdAt": "2025-12-05T08:00:00.000Z"
+      }
+    ],
+    "pagination": {
+      "currentPage": 1,
+      "totalPages": 3,
+      "totalItems": 52,
+      "itemsPerPage": 20
+    }
+  }
+}
+```
+
+**Implementation:**
+- File: `src/controllers/brandController.js`
+- Function: `getBrands()`
+
+**cURL Example:**
+
+```bash
+curl -X GET "http://localhost:5000/api/brands?active=true&page=1" \
+  -H "Authorization: Bearer TOKEN"
+```
+
+**Notes:**
+- Tất cả authenticated users đều có thể xem brands (không restrict theo role)
+- Dùng để populate dropdowns, display store info, assign broadcasts
+- Search hỗ trợ partial match với tên chi nhánh
+
+⚠️ **DATA TYPE WARNING (Rule 6):**
+- `Active`: String **"true"/"false"** - KHÔNG phải Boolean!
+- `Active_Schedule`: String **"true"/"false"** - KHÔNG phải Boolean!
+- **Frontend PHẢI parse:**
+  ```javascript
+  // Check if brand is active
+  const isActive = brand.Active === "true";  // NOT: if (brand.Active)
+  
+  // Check if schedule is active
+  const hasSchedule = brand.Active_Schedule === "true";  // NOT: if (brand.Active_Schedule)
+  ```
+
+⚠️ **READ-ONLY WARNING (Rule 1):**
+- Brand data synced từ external ERP system
+- **KHÔNG có** CREATE/UPDATE/DELETE operations
+- Muốn thêm/sửa store → Phải thay đổi trong ERP system
+
+---
 
 ### GET /api/brands/:id
-- **Description:** Get brand by ID
-- **Access:** Private (All authenticated users)
-- **Middleware:** `authenticate`
-- **Validator:** `validateGetBrandById`
-- **Controller:** `getBrandById()`
-- **Params:** `id` - Brand ObjectId
+
+**Mô tả:** Lấy chi tiết brand/store theo ID
+
+**Access:** 🔒 Private (All authenticated users)  
+**Business Logic:** [01-BUSINESS-LOGIC.md § Store Management](01-BUSINESS-LOGIC.md#3-storetask-workflow)
+
+**Request:**
+
+```http
+GET /api/brands/65f1234567890abcdef11111 HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer {TOKEN}
+```
+
+**Path Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | ObjectId | ✅ Yes | Brand ObjectId |
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "65f1234567890abcdef11111",
+    "Ten_chi_nhanh": "Chi nhánh Quận 1",
+    "Dia_chi": "123 Nguyễn Huệ, Quận 1, TP.HCM",
+    "Dien_thoai": "0289876543",
+    "Email": "quan1@example.com",
+    "Active": "true",
+    "Active_Schedule": "true",
+    "Ghi_chu": "Chi nhánh trung tâm",
+    "createdAt": "2025-12-01T08:00:00.000Z",
+    "updatedAt": "2026-02-15T10:30:00.000Z"
+  }
+}
+```
+
+**Response 404 (Brand Not Found):**
+
+```json
+{
+  "success": false,
+  "message": "Không tìm thấy brand"
+}
+```
+
+**Implementation:**
+- File: `src/controllers/brandController.js`
+- Function: `getBrandById()`
+
+**cURL Example:**
+
+```bash
+curl -X GET http://localhost:5000/api/brands/65f1234567890abcdef11111 \
+  -H "Authorization: Bearer TOKEN"
+```
+
+**Notes:**
+- Tất cả authenticated users xem được detail
+- Dùng để display store profile, check active status
+- Không populate employees (dùng GET /api/brands/:id/employees riêng)
+
+⚠️ **DATA TYPE WARNING (Rule 6):**
+- `Active` và `Active_Schedule`: **String "true"/"false"**, không phải Boolean
+- **Inconsistency:** Brand status dùng String, Employee status dùng "1"/"0", GroupUser status dùng Number 1/0
+
+⚠️ **NAMING CONFUSION:**
+- **Model name:** `Brand` (trong code)
+- **Collection name:** `Branch` (trong MongoDB)
+- **Display name:** "Chi nhánh" hoặc "Store" (trong UI)
+- **Field tham chiếu:** `ID_Branch` (trong Employee model)
+
+---
 
 ### GET /api/brands/:id/employees
-- **Description:** Get all employees of a brand
-- **Access:** Private (Admin, Manager)
-- **Middleware:** `authenticate`, `authorize('admin', 'manager')`
-- **Validator:** `validateGetBrandEmployees`
-- **Controller:** `getBrandEmployees()`
-- **Params:** `id` - Brand ObjectId
-- **Note:** Manager can only see their own branch employees
+
+**Mô tả:** Lấy danh sách employees thuộc brand/store này
+
+**Access:** 🔒 Admin, Manager  
+**Business Logic:** [01-BUSINESS-LOGIC.md § Store Management](01-BUSINESS-LOGIC.md#3-storetask-workflow)
+
+**Request:**
+
+```http
+GET /api/brands/65f1234567890abcdef11111/employees HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer {MANAGER_TOKEN}
+```
+
+**Path Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | ObjectId | ✅ Yes | Brand ObjectId |
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "brand": {
+      "_id": "65f1234567890abcdef11111",
+      "Ten_chi_nhanh": "Chi nhánh Quận 1"
+    },
+    "employees": [
+      {
+        "_id": "65f1234567890abcdef12345",
+        "Ho_va_ten": "Nguyễn Văn A",
+        "So_dien_thoai": "0987654321",
+        "Email": "nguyenvana@example.com",
+        "ID_nhom": {
+          "_id": "65f1234567890abcdef22222",
+          "Ten_nhom": "Nhân viên"
+        },
+        "role": "employee",
+        "Trang_thai": "1"
+      },
+      {
+        "_id": "65f1234567890abcdef12346",
+        "Ho_va_ten": "Trần Thị B",
+        "So_dien_thoai": "0987654322",
+        "Email": "tranthib@example.com",
+        "ID_nhom": {
+          "_id": "65f1234567890abcdef22223",
+          "Ten_nhom": "Quản lý"
+        },
+        "role": "manager",
+        "Trang_thai": "1"
+      }
+    ],
+    "total": 15
+  }
+}
+```
+
+**Response 403 (Not Authorized - Manager accessing another branch):**
+
+```json
+{
+  "success": false,
+  "message": "Bạn chỉ được xem employees của chi nhánh mình"
+}
+```
+
+**Response 404 (Brand Not Found):**
+
+```json
+{
+  "success": false,
+  "message": "Không tìm thấy brand"
+}
+```
+
+**Implementation:**
+- File: `src/controllers/brandController.js`
+- Function: `getBrandEmployees()`
+
+**cURL Example:**
+
+```bash
+curl -X GET http://localhost:5000/api/brands/65f1234567890abcdef11111/employees \
+  -H "Authorization: Bearer MANAGER_TOKEN"
+```
+
+**Notes:**
+- **Admin:** Có thể xem employees của tất cả branches
+- **Manager:** Chỉ xem được employees của branch mình (check `manager.ID_Branch === brandId`)
+- Dùng để assign tasks, manage team, view org chart
+
+⚠️ **AUTHORIZATION LOGIC (Rule 7):**
+- **Manager restriction:**
+  ```javascript
+  if (req.user.role === 'manager') {
+    const manager = await Employee.findById(req.user._id).populate('ID_Branch');
+    if (manager.ID_Branch._id.toString() !== brandId) {
+      return res.status(403).json({ message: 'Bạn chỉ được xem employees của chi nhánh mình' });
+    }
+  }
+  ```
+- **Admin:** No restriction, full access
+
+⚠️ **DATA TYPE WARNING (Rule 6):**
+- Employee fields vẫn có data type issues:
+  - `Trang_thai`: String "1"/"0"
+  - `is_timekeeping_all`: String "true"/"false"
+  - Frontend phải parse khi cần logic checks
 
 ### ❌ REMOVED OPERATIONS (March 19, 2026)
 
@@ -1560,26 +2006,231 @@ curl -X DELETE http://localhost:5000/api/broadcasts/user-tasks/65fa123456789abcd
 **Validators:** `src/validators/storeTaskValidator.js`
 
 ### GET /api/store-tasks
-- **Description:** Get all store tasks with filtering
-- **Access:** Private (Admin, Manager)
-- **Middleware:** `authenticate`, `authorize('admin', 'manager')`
-- **Validator:** `validateGetStoreTasks`
-- **Controller:** `getStoreTasks()`
-- **Query Params:**
-  - `status` - Filter by status
-  - `storeId` - Filter by store
-  - `broadcastId` - Filter by broadcast
-  - `page`, `limit` - Pagination
-- **Note:** Manager can only see their own store's tasks
+
+**Mô tả:** Lấy danh sách tất cả StoreTasks với filtering và pagination
+
+**Access:** 🔒 Admin, Manager  
+**Business Logic:** [01-BUSINESS-LOGIC.md § StoreTask Workflow](01-BUSINESS-LOGIC.md#3-storetask-workflow)
+
+**Request:**
+
+```http
+GET /api/store-tasks?status=pending&storeId=65f1234567890abcdef11111&page=1&limit=20 HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer {MANAGER_TOKEN}
+```
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `status` | string | ❌ No | Filter: 'pending' \| 'accepted' \| 'in_progress' \| 'completed' \| 'rejected' |
+| `storeId` | ObjectId | ❌ No | Filter theo cửa hàng |
+| `broadcastId` | ObjectId | ❌ No | Filter theo broadcast |
+| `page` | number | ❌ No | Số trang (default: 1) |
+| `limit` | number | ❌ No | Items per page (default: 20, max: 100) |
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "storeTasks": [
+      {
+        "_id": "65f9876543210fedcba98766",
+        "broadcastId": {
+          "_id": "65f9876543210fedcba98765",
+          "title": "Kiểm tra vệ sinh tháng 3"
+        },
+        "storeId": {
+          "_id": "65f1234567890abcdef11111",
+          "Ten_chi_nhanh": "Chi nhánh Quận 1"
+        },
+        "status": "pending",
+        "priority": "high",
+        "deadline": "2026-03-31T23:59:59.000Z",
+        "assignedEmployees": [],
+        "completionRate": 0,
+        "createdAt": "2026-03-19T08:00:00.000Z"
+      }
+    ],
+    "pagination": {
+      "currentPage": 1,
+      "totalPages": 2,
+      "totalItems": 35,
+      "itemsPerPage": 20
+    }
+  }
+}
+```
+
+**Response 403 (Manager accessing other store's tasks):**
+
+```json
+{
+  "success": false,
+  "message": "Bạn chỉ được xem tasks của cửa hàng mình"
+}
+```
+
+**Implementation:**
+- File: `src/controllers/storeTaskController.js`
+- Function: `getStoreTasks()`
+
+**cURL Example:**
+
+```bash
+curl -X GET "http://localhost:5000/api/store-tasks?status=pending" \
+  -H "Authorization: Bearer MANAGER_TOKEN"
+```
+
+**Notes:**
+- **Admin:** Xem tất cả StoreTasks của all stores
+- **Manager:** Chỉ xem StoreTasks của store mình (filter by manager.ID_Branch)
+- Results được populate với broadcast và store info
+- `completionRate` computed from UserTasks progress
+
+⚠️ **AUTHORIZATION LOGIC (Rule 7):**
+- **Manager restriction:**
+  ```javascript
+  if (req.user.role === 'manager') {
+    const manager = await Employee.findById(req.user._id).populate('ID_Branch');
+    query.storeId = manager.ID_Branch._id;  // Auto-filter
+  }
+  ```
+- **Admin:** No filter, xem tất cả
+
+---
 
 ### GET /api/store-tasks/:id
-- **Description:** Get store task by ID
-- **Access:** Private (Admin, Manager)
-- **Middleware:** `authenticate`, `authorize('admin', 'manager')`
-- **Validator:** `validateGetStoreTaskById`
-- **Controller:** `getStoreTaskById()`
-- **Params:** `id` - StoreTask ObjectId
-- **Note:** Manager can only see their own store's tasks
+
+**Mô tả:** Lấy chi tiết StoreTask theo ID
+
+**Access:** 🔒 Admin, Manager (own store)  
+**Business Logic:** [01-BUSINESS-LOGIC.md § StoreTask Workflow](01-BUSINESS-LOGIC.md#3-storetask-workflow)
+
+**Request:**
+
+```http
+GET /api/store-tasks/65f9876543210fedcba98766 HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer {MANAGER_TOKEN}
+```
+
+**Path Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | ObjectId | ✅ Yes | StoreTask ObjectId |
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "65f9876543210fedcba98766",
+    "broadcastId": {
+      "_id": "65f9876543210fedcba98765",
+      "title": "Kiểm tra vệ sinh tháng 3",
+      "description": "Kiểm tra và đảm bảo vệ sinh toàn bộ cửa hàng",
+      "priority": "high",
+      "checklist": [
+        {
+          "title": "Lau sàn nhà",
+          "required": true
+        }
+      ],
+      "attachments": []
+    },
+    "storeId": {
+      "_id": "65f1234567890abcdef11111",
+      "Ten_chi_nhanh": "Chi nhánh Quận 1",
+      "Dia_chi": "123 Nguyễn Huệ, Quận 1"
+    },
+    "status": "in_progress",
+    "priority": "high",
+    "deadline": "2026-03-31T23:59:59.000Z",
+    "assignedEmployees": [
+      "65f1234567890abcdef12346",
+      "65f1234567890abcdef12347"
+    ],
+    "assignedBy": {
+      "_id": "65f1234567890abcdef12345",
+      "Ho_va_ten": "Trần Thị Manager"
+    },
+    "acceptedAt": "2026-03-20T08:00:00.000Z",
+    "acceptedBy": "65f1234567890abcdef12345",
+    "completionRate": 65,
+    "userTasks": [
+      {
+        "_id": "65fa123456789abcdef00001",
+        "employeeId": "65f1234567890abcdef12346",
+        "status": "in_progress",
+        "progress": 50
+      },
+      {
+        "_id": "65fa123456789abcdef00002",
+        "employeeId": "65f1234567890abcdef12347",
+        "status": "approved",
+        "progress": 100
+      }
+    ],
+    "createdAt": "2026-03-19T08:00:00.000Z"
+  }
+}
+```
+
+**Response 403 (Manager accessing other store's task):**
+
+```json
+{
+  "success": false,
+  "message": "Bạn không có quyền xem task này"
+}
+```
+
+**Response 404 (StoreTask Not Found):**
+
+```json
+{
+  "success": false,
+  "message": "Không tìm thấy StoreTask"
+}
+```
+
+**Implementation:**
+- File: `src/controllers/storeTaskController.js`
+- Function: `getStoreTaskById()`
+
+**cURL Example:**
+
+```bash
+curl -X GET http://localhost:5000/api/store-tasks/65f9876543210fedcba98766 \
+  -H "Authorization: Bearer MANAGER_TOKEN"
+```
+
+**Notes:**
+- Manager chỉ xem được StoreTask của store mình
+- Response includes full broadcast details (checklist, attachments)
+- Includes array of UserTasks với employee progress
+- `completionRate` = average progress của tất cả UserTasks
+
+⚠️ **AUTHORIZATION LOGIC (Rule 7):**
+- **Manager validation:**
+  ```javascript
+  if (req.user.role === 'manager') {
+    const manager = await Employee.findById(req.user._id).populate('ID_Branch');
+    const storeTask = await StoreTask.findById(id).populate('storeId');
+    
+    if (storeTask.storeId._id.toString() !== manager.ID_Branch._id.toString()) {
+      return res.status(403).json({ message: 'Không có quyền xem' });
+    }
+  }
+  ```
+
+---
 
 ### PUT /api/store-tasks/:id/accept
 
@@ -1674,24 +2325,261 @@ curl -X PUT http://localhost:5000/api/store-tasks/65f9876543210fedcba98766/accep
 ---
 
 ### PUT /api/store-tasks/:id/reject
-- **Description:** Reject a store task
-- **Access:** Private (Manager only)
-- **Middleware:** `authenticate`, `authorize('manager')`
-- **Validator:** `validateRejectStoreTask`
-- **Controller:** `rejectStoreTask()`
-- **Params:** `id` - StoreTask ObjectId
-- **Body:** `{ reason }` - Rejection reason (required)
-- **Note:** Only manager of the store can reject
+
+**Mô tả:** Manager từ chối StoreTask với lý do (status: pending/accepted → rejected)
+
+**Access:** 🔒 Manager only (own store)  
+**Business Logic:** [01-BUSINESS-LOGIC.md § StoreTask Workflow](01-BUSINESS-LOGIC.md#3-storetask-workflow)
+
+**Request:**
+
+```http
+PUT /api/store-tasks/65f9876543210fedcba98766/reject HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer {MANAGER_TOKEN}
+Content-Type: application/json
+
+{
+  "reason": "Cửa hàng đang sửa chữa, không thể thực hiện task này"
+}
+```
+
+**Request Body:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `reason` | string | ✅ Yes | Lý do từ chối (min 10 chars) |
+
+**Validation:**
+- Manager phải là manager của store này
+- StoreTask phải có status="pending" hoặc "accepted"
+- Reason không được rỗng và phải đủ 10 ký tự
+
+**Process:**
+1. Validate manager owns this store
+2. Check StoreTask status = "pending" or "accepted"
+3. Update status → "rejected"
+4. Set rejectedAt timestamp
+5. Set rejectedBy = manager employeeId
+6. Set rejectionReason = reason
+7. Delete tất cả UserTasks đã assigned (nếu có)
+8. Create notification cho Admin và employees (task cancelled)
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "message": "StoreTask đã bị từ chối",
+  "data": {
+    "_id": "65f9876543210fedcba98766",
+    "status": "rejected",
+    "rejectedAt": "2026-03-20T09:00:00.000Z",
+    "rejectedBy": "65f1234567890abcdef12345",
+    "rejectionReason": "Cửa hàng đang sửa chữa, không thể thực hiện task này",
+    "userTasksDeleted": 2
+  }
+}
+```
+
+**Response 400 (Invalid Status):**
+
+```json
+{
+  "success": false,
+  "message": "Chỉ có thể reject task ở trạng thái pending hoặc accepted"
+}
+```
+
+**Response 403 (Not Manager of This Store):**
+
+```json
+{
+  "success": false,
+  "message": "Bạn không phải manager của cửa hàng này"
+}
+```
+
+**Implementation:**
+- File: `src/controllers/storeTaskController.js`
+- Function: `rejectStoreTask()`
+
+**cURL Example:**
+
+```bash
+curl -X PUT http://localhost:5000/api/store-tasks/65f9876543210fedcba98766/reject \
+  -H "Authorization: Bearer MANAGER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"reason": "Cửa hàng đang sửa chữa"}'
+```
+
+**Notes:**
+- Reject task sẽ **xóa tất cả UserTasks** đã assigned (employees không còn task này)
+- Admin và employees nhận notification task cancelled
+- Manager cần provide lý do hợp lệ (min 10 chars)
+
+⚠️ **AUTHORIZATION LOGIC (Rule 7):**
+- Manager phải own store: `manager.ID_Branch === storeTask.storeId`
+- Không reject được task của store khác (403)
+
+⚠️ **SIDE EFFECT - UserTask Deletion:**
+- Tất cả UserTasks liên quan đều bị **xóa**
+- Employees nhận notification: "Task {title} đã bị hủy bởi manager: {reason}"
+- Database cleanup: `UserTask.deleteMany({ storeTaskId })`
+
+---
 
 ### POST /api/store-tasks/:id/assign
-- **Description:** Assign employees to a store task
-- **Access:** Private (Manager only)
-- **Middleware:** `authenticate`, `authorize('manager')`
-- **Validator:** `validateAssignEmployees`
-- **Controller:** `assignEmployees()`
-- **Params:** `id` - StoreTask ObjectId
-- **Body:** `{ employeeIds }` - Array of Employee IDs
-- **Note:** Creates UserTask for each employee
+
+**Mô tả:** Manager assign employees vào StoreTask → Tạo UserTasks (status: accepted → in_progress)
+
+**Access:** 🔒 Manager only (own store)  
+**Business Logic:** [01-BUSINESS-LOGIC.md § StoreTask Workflow](01-BUSINESS-LOGIC.md#3-storetask-workflow)
+
+**Request:**
+
+```http
+POST /api/store-tasks/65f9876543210fedcba98766/assign HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer {MANAGER_TOKEN}
+Content-Type: application/json
+
+{
+  "employeeIds": [
+    "65f1234567890abcdef12346",
+    "65f1234567890abcdef12347",
+    "65f1234567890abcdef12348"
+  ]
+}
+```
+
+**Request Body:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `employeeIds` | array | ✅ Yes | Array of Employee ObjectIds (min 1) |
+
+**Validation:**
+- Manager phải là manager của store này
+- StoreTask phải có status="accepted" (phải accept trước)
+- Employee IDs phải tồn tại và active
+- Employees phải thuộc store này (check ID_Branch)
+
+**Process:**
+1. Validate manager owns store
+2. Check StoreTask status = "accepted"
+3. Validate tất cả employees thuộc store này
+4. Tạo UserTask cho mỗi employee:
+   - Copy checklist từ broadcast
+   - Set status = "assigned"
+   - Set employeeId, storeTaskId, broadcastId
+5. Update StoreTask:
+   - status → "in_progress"
+   - assignedEmployees ← add employeeIds
+   - assignedBy = manager employeeId
+   - assignedAt = current timestamp
+6. Create notifications cho mỗi employee
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "message": "Assign thành công",
+  "data": {
+    "storeTask": {
+      "_id": "65f9876543210fedcba98766",
+      "status": "in_progress",
+      "assignedEmployees": [
+        "65f1234567890abcdef12346",
+        "65f1234567890abcdef12347",
+        "65f1234567890abcdef12348"
+      ],
+      "assignedBy": "65f1234567890abcdef12345",
+      "assignedAt": "2026-03-20T10:00:00.000Z"
+    },
+    "userTasksCreated": 3,
+    "notificationsSent": 3
+  }
+}
+```
+
+**Response 400 (StoreTask not accepted):**
+
+```json
+{
+  "success": false,
+  "message": "StoreTask phải được accept trước khi assign employees"
+}
+```
+
+**Response 400 (Employee not in this store):**
+
+```json
+{
+  "success": false,
+  "message": "Employee 65f1234567890abcdef12349 không thuộc cửa hàng này",
+  "invalidEmployeeIds": ["65f1234567890abcdef12349"]
+}
+```
+
+**Response 403 (Not Manager of This Store):**
+
+```json
+{
+  "success": false,
+  "message": "Bạn không phải manager của cửa hàng này"
+}
+```
+
+**Implementation:**
+- File: `src/controllers/storeTaskController.js`
+- Function: `assignEmployees()`
+
+**cURL Example:**
+
+```bash
+curl -X POST http://localhost:5000/api/store-tasks/65f9876543210fedcba98766/assign \
+  -H "Authorization: Bearer MANAGER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "employeeIds": [
+      "65f1234567890abcdef12346",
+      "65f1234567890abcdef12347"
+    ]
+  }'
+```
+
+**Notes:**
+- Phải **accept StoreTask trước** khi assign employees
+- Mỗi employee nhận 1 UserTask riêng biệt
+- UserTask status ban đầu: "assigned" (chưa start)
+- StoreTask status tự động chuyển sang "in_progress"
+- Employees nhận real-time notification
+
+⚠️ **AUTO BEHAVIOR - Status Transition (Rule 9):**
+- Assign employees → **StoreTask status: "accepted" → "in_progress"**
+- Không cần manually chuyển status
+- UserTask.status = "assigned" (chờ employee start làm việc)
+
+⚠️ **AUTHORIZATION LOGIC (Rule 7):**
+- Manager chỉ assign được employees **thuộc store mình**:
+  ```javascript
+  const employees = await Employee.find({ 
+    _id: { $in: employeeIds },
+    ID_Branch: manager.ID_Branch  // PHẢI cùng store
+  });
+  
+  if (employees.length !== employeeIds.length) {
+    return res.status(400).json({ message: 'Một số employees không thuộc store này' });
+  }
+  ```
+
+⚠️ **NOTIFICATION AUTO-CREATE (Rule 9):**
+- Mỗi employee nhận notification:
+  - Type: `'task_assigned'`
+  - Message: "Bạn được giao task: {broadcast.title}"
+  - Link to: `/my-tasks/{userTaskId}`
 
 ---
 
@@ -2334,32 +3222,320 @@ curl -X POST http://localhost:5000/api/my-tasks/65fa123456789abcdef00001/submit 
 **Validators:** `src/validators/reviewValidator.js`
 
 ### GET /api/reviews/pending
-- **Description:** Get all pending reviews (submitted user tasks)
-- **Access:** Private (Manager)
-- **Middleware:** `authenticate`, `authorize('manager')`
-- **Validator:** `validateGetPendingReviews`
-- **Controller:** `getPendingReviews()`
-- **Response:** List of UserTasks with status 'submitted'
+
+**Mô tả:** Lấy danh sách tasks đang chờ review (status = 'submitted')
+
+**Access:** 🔒 Manager only  
+**Business Logic:** [01-BUSINESS-LOGIC.md § UserTask Workflow](01-BUSINESS-LOGIC.md#4-usertask-workflow)
+
+**Request:**
+
+```http
+GET /api/reviews/pending HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer {MANAGER_TOKEN}
+```
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "pendingTasks": [
+      {
+        "_id": "65fa123456789abcdef00001",
+        "broadcastId": {
+          "_id": "65f9876543210fedcba98765",
+          "title": "Kiểm tra vệ sinh tháng 3"
+        },
+        "employeeId": {
+          "_id": "65f1234567890abcdef12346",
+          "Ho_va_ten": "Nguyễn Văn A",
+          "So_dien_thoai": "0987654321"
+        },
+        "storeTaskId": "65f9876543210fedcba98766",
+        "status": "submitted",
+        "priority": "high",
+        "deadline": "2026-03-31T23:59:59.000Z",
+        "progress": 100,
+        "evidences": [
+          {
+            "url": "https://example.com/uploads/proof1.jpg",
+            "filename": "san-nha-sau-khi-lau.jpg",
+            "type": "image"
+          }
+        ],
+        "submittedAt": "2026-03-25T14:30:00.000Z",
+        "daysWaiting": 2
+      }
+    ],
+    "total": 5
+  }
+}
+```
+
+**Implementation:**
+- File: `src/controllers/reviewController.js`
+- Function: `getPendingReviews()`
+
+**cURL Example:**
+
+```bash
+curl -X GET http://localhost:5000/api/reviews/pending \
+  -H "Authorization: Bearer MANAGER_TOKEN"
+```
+
+**Notes:**
+- Manager chỉ xem tasks của employees thuộc store mình
+- Tasks được sort theo submittedAt (oldest first)
+- Includes evidences và progress để manager review
+- `daysWaiting` computed = current date - submittedAt
+
+⚠️ **AUTHORIZATION LOGIC (Rule 7):**
+- Manager chỉ xem **UserTasks của employees thuộc store mình**:
+  ```javascript
+  const manager = await Employee.findById(req.user._id).populate('ID_Branch');
+  const employees = await Employee.find({ ID_Branch: manager.ID_Branch });
+  const employeeIds = employees.map(e => e._id);
+  
+  const tasks = await UserTask.find({ 
+    employeeId: { $in: employeeIds },
+    status: 'submitted'
+  });
+  ```
+
+---
 
 ### POST /api/reviews/:taskId/approve
-- **Description:** Approve an employee task
-- **Access:** Private (Manager)
-- **Middleware:** `authenticate`, `authorize('manager')`
-- **Validator:** `validateApproveTask`
-- **Controller:** `approveTask()`
-- **Params:** `taskId` - UserTask ObjectId
-- **Body:** 
-  - `rating` - Number (1-5, optional)
-  - `reviewNote` - String (optional)
+
+**Mô tả:** Manager approve task của employee (status: submitted → approved)
+
+**Access:** 🔒 Manager only  
+**Business Logic:** [01-BUSINESS-LOGIC.md § UserTask Workflow](01-BUSINESS-LOGIC.md#4-usertask-workflow)
+
+**Request:**
+
+```http
+POST /api/reviews/65fa123456789abcdef00001/approve HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer {MANAGER_TOKEN}
+Content-Type: application/json
+
+{
+  "rating": 5,
+  "reviewNote": "Làm rất tốt, sàn nhà sạch sẽ"
+}
+```
+
+**Request Body:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `rating` | number | ❌ No | Đánh giá 1-5 sao |
+| `reviewNote` | string | ❌ No | Ghi chú review |
+
+**Validation:**
+- UserTask phải có status="submitted"
+- Manager phải là manager của store này (employee.ID_Branch = manager.ID_Branch)
+- Rating (nếu có) phải từ 1-5
+
+**Process:**
+1. Validate manager owns employee's store
+2. Check UserTask status = "submitted"
+3. Update UserTask:
+   - status → "approved"
+   - reviewedBy = manager employeeId
+   - reviewedAt = current timestamp
+   - rating, reviewNote (if provided)
+   - completedAt = current timestamp
+4. Update StoreTask completion rate
+5. Create notification cho employee (task approved)
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "message": "Task đã được approve",
+  "data": {
+    "_id": "65fa123456789abcdef00001",
+    "status": "approved",
+    "rating": 5,
+    "reviewNote": "Làm rất tốt, sàn nhà sạch sẽ",
+    "reviewedBy": "65f1234567890abcdef12345",
+    "reviewedAt": "2026-03-27T10:00:00.000Z",
+    "completedAt": "2026-03-27T10:00:00.000Z"
+  }
+}
+```
+
+**Response 400 (Task not submitted):**
+
+```json
+{
+  "success": false,
+  "message": "Chỉ có thể approve task ở trạng thái submitted"
+}
+```
+
+**Response 403 (Not Manager of Employee's Store):**
+
+```json
+{
+  "success": false,
+  "message": "Bạn không có quyền review task này"
+}
+```
+
+**Implementation:**
+- File: `src/controllers/reviewController.js`
+- Function: `approveTask()`
+
+**cURL Example:**
+
+```bash
+curl -X POST http://localhost:5000/api/reviews/65fa123456789abcdef00001/approve \
+  -H "Authorization: Bearer MANAGER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"rating": 5, "reviewNote": "Làm tốt lắm!"}'
+```
+
+**Notes:**
+- Rating optional nhưng recommended (để track employee performance)
+- ReviewNote optional (để give feedback)
+- Employee nhận notification với rating và note
+- Task completion được tính vào dashboard stats
+
+⚠️ **AUTO BEHAVIOR - Completion (Rule 9):**
+- Approve → Set `completedAt` timestamp
+- StoreTask completion rate auto-recalculated:
+  - Count approved UserTasks / total UserTasks
+  - Update StoreTask.completionRate
+- **Notification auto-create:**
+  - Type: `'task_approved'`
+  - Recipient: Employee
+  - Message: "Task '{title}' đã được approve" + rating/note
+
+⚠️ **SECURITY WARNING - XSS (Rule 8):**
+- `reviewNote` field **KHÔNG được sanitize**
+- Attack vector: Manager inject malicious script
+- Workaround: Frontend escape HTML khi display
+- Priority: LOW (chỉ Manager có thể tạo reviewNote)
+
+---
 
 ### POST /api/reviews/:taskId/reject
-- **Description:** Reject an employee task
-- **Access:** Private (Manager)
-- **Middleware:** `authenticate`, `authorize('manager')`
-- **Validator:** `validateRejectTask`
-- **Controller:** `rejectTask()`
-- **Params:** `taskId` - UserTask ObjectId
-- **Body:** `{ reason }` - Rejection reason (required)
+
+**Mô tả:** Manager reject task của employee (status: submitted → rejected)
+
+**Access:** 🔒 Manager only  
+**Business Logic:** [01-BUSINESS-LOGIC.md § UserTask Workflow](01-BUSINESS-LOGIC.md#4-usertask-workflow)
+
+**Request:**
+
+```http
+POST /api/reviews/65fa123456789abcdef00001/reject HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer {MANAGER_TOKEN}
+Content-Type: application/json
+
+{
+  "reason": "Sàn nhà chưa sạch, còn nhiều vết bẩn ở góc. Vui lòng làm lại."
+}
+```
+
+**Request Body:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `reason` | string | ✅ Yes | Lý do reject (min 10 chars) |
+
+**Validation:**
+- UserTask phải có status="submitted"
+- Manager phải là manager của store này
+- Reason không được rỗng và min 10 ký tự
+
+**Process:**
+1. Validate manager owns employee's store
+2. Check UserTask status = "submitted"
+3. Update UserTask:
+   - status → "rejected"
+   - rejectedBy = manager employeeId
+   - rejectedAt = current timestamp
+   - rejectionReason = reason
+4. Create notification cho employee (task rejected với reason)
+5. Employee phải fix và submit lại
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "message": "Task đã bị reject",
+  "data": {
+    "_id": "65fa123456789abcdef00001",
+    "status": "rejected",
+    "rejectionReason": "Sàn nhà chưa sạch, còn nhiều vết bẩn ở góc. Vui lòng làm lại.",
+    "rejectedBy": "65f1234567890abcdef12345",
+    "rejectedAt": "2026-03-27T11:00:00.000Z"
+  }
+}
+```
+
+**Response 400 (Task not submitted):**
+
+```json
+{
+  "success": false,
+  "message": "Chỉ có thể reject task ở trạng thái submitted"
+}
+```
+
+**Response 403 (Not Manager of Employee's Store):**
+
+```json
+{
+  "success": false,
+  "message": "Bạn không có quyền review task này"
+}
+```
+
+**Implementation:**
+- File: `src/controllers/reviewController.js`
+- Function: `rejectTask()`
+
+**cURL Example:**
+
+```bash
+curl -X POST http://localhost:5000/api/reviews/65fa123456789abcdef00001/reject \
+  -H "Authorization: Bearer MANAGER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"reason": "Sàn nhà chưa sạch, làm lại"}'
+```
+
+**Notes:**
+- Employee nhận notification với lý do reject chi tiết
+- Task quay về status="rejected", employee có thể edit và submit lại
+- Reason phải đủ rõ ràng để employee biết cần fix gì
+- Employee có thể submit lại nhiều lần (không limit)
+
+⚠️ **AUTO BEHAVIOR - Re-work Flow (Rule 9):**
+- Reject → Task quay về editable state
+- Employee có thể:
+  - Update checklist
+  - Upload thêm evidences
+  - Submit lại khi đã fix
+- **Notification auto-create:**
+  - Type: `'task_rejected'`
+  - Recipient: Employee
+  - Message: "Task '{title}' bị reject: {reason}"
+
+⚠️ **SECURITY WARNING - XSS (Rule 8):**
+- `reason` field **KHÔNG được sanitize**
+- Attack vector: Manager inject script trong rejection reason
+- Workaround: Frontend escape HTML
+- Priority: LOW
 
 ---
 
@@ -2370,43 +3546,323 @@ curl -X POST http://localhost:5000/api/my-tasks/65fa123456789abcdef00001/submit 
 **Controller:** `src/controllers/dashboardController.js`
 
 ### GET /api/dashboard/admin
-- **Description:** Get admin dashboard data
-- **Access:** Private (Admin only)
-- **Middleware:** `authenticate`, `authorize('admin')`
-- **Controller:** `getAdminDashboard()`
-- **Response:**
-  - Total broadcasts, tasks, completion rates
-  - Tasks by status (pending, in-progress, overdue, completed)
-  - Recent activity
+
+**Mô tả:** Lấy toàn bộ dashboard stats cho Admin (system-wide)
+
+**Access:** 🔒 Admin only  
+
+**Request:**
+
+```http
+GET /api/dashboard/admin HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer {ADMIN_TOKEN}
+```
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "summary": {
+      "totalBroadcasts": 125,
+      "totalStoreTasks": 450,
+      "totalUserTasks": 2340,
+      "totalEmployees": 285,
+      "totalStores": 45,
+      "systemCompletionRate": 78.5
+    },
+    "tasksByStatus": {
+      "pending": 150,
+      "in_progress": 842,
+      "submitted": 125,
+      "approved": 1123,
+      "rejected": 100,
+      "overdue": 85
+    },
+    "recentBroadcasts": [
+      {
+        "_id": "65f9876543210fedcba98765",
+        "title": "Kiểm tra vệ sinh tháng 3",
+        "status": "published",
+        "deadline": "2026-03-31T23:59:59.000Z",
+        "assignedStores": 12,
+        "completionRate": 65
+      }
+    ],
+    "topPerformingStores": [
+      {
+        "storeId": "65f1234567890abcdef11111",
+        "storeName": "Chi nhánh Quận 1",
+        "completionRate": 95,
+        "tasksCompleted": 48
+      }
+    ]
+  }
+}
+```
+
+**Implementation:**
+- File: `src/controllers/dashboardController.js`
+- Function: `getAdminDashboard()`
+
+**cURL Example:**
+
+```bash
+curl -X GET http://localhost:5000/api/dashboard/admin \
+  -H "Authorization: Bearer ADMIN_TOKEN"
+```
+
+**Notes:**
+- System-wide stats across all stores
+- Completion rates calculated from UserTask statuses
+- Recent broadcasts limit 10, sorted by createdAt DESC
+- Top stores limit 5, sorted by completionRate DESC
+
+---
 
 ### GET /api/dashboard/admin/tasks/:status
-- **Description:** Get admin tasks by status
-- **Access:** Private (Admin only)
-- **Middleware:** `authenticate`, `authorize('admin')`
-- **Controller:** `getAdminTasksByStatus()`
-- **Params:** `status` - 'completed' | 'overdue' | 'in-progress' | 'pending-confirm'
-- **Response:** List of UserTasks with userTaskId and employeeName
-- **Note:** ⚠️ Returns userTaskId for reassign/delete - FIXED March 18, 2026
+
+**Mô tả:** Lấy danh sách UserTasks theo status (Admin view)
+
+**Access:** 🔒 Admin only  
+
+**Request:**
+
+```http
+GET /api/dashboard/admin/tasks/overdue HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer {ADMIN_TOKEN}
+```
+
+**Path Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `status` | string | ✅ Yes | 'completed' \| 'overdue' \| 'in-progress' \| 'pending-confirm' |
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "tasks": [
+      {
+        "userTaskId": "65fa123456789abcdef00001",
+        "broadcastTitle": "Kiểm tra vệ sinh tháng 3",
+        "employeeId": "65f1234567890abcdef12346",
+        "employeeName": "Nguyễn Văn A",
+        "storeName": "Chi nhánh Quận 1",
+        "status": "in_progress",
+        "progress": 50,
+        "deadline": "2026-03-31T23:59:59.000Z",
+        "daysOverdue": 3
+      }
+    ],
+    "total": 85
+  }
+}
+```
+
+**Implementation:**
+- File: `src/controllers/dashboardController.js`
+- Function: `getAdminTasksByStatus()`
+
+**cURL Example:**
+
+```bash
+curl -X GET http://localhost:5000/api/dashboard/admin/tasks/overdue \
+  -H "Authorization: Bearer ADMIN_TOKEN"
+```
+
+**Notes:**
+- ⚠️ Returns `userTaskId` for reassign/delete operations (FIXED March 18, 2026)
+- Status 'pending-confirm' = submitted tasks waiting for manager review
+- Overdue tasks: deadline < current date AND status NOT approved
+- Response includes employee info for quick reassign
+
+---
 
 ### GET /api/dashboard/manager
-- **Description:** Get manager dashboard data
-- **Access:** Private (Manager only)
-- **Middleware:** `authenticate`, `authorize('manager')`
-- **Controller:** `getManagerDashboard()`
-- **Response:**
-  - Store tasks for manager's branch
-  - Employee performance
-  - Pending reviews
+
+**Mô tả:** Lấy dashboard stats cho Manager (store-level)
+
+**Access:** 🔒 Manager only  
+
+**Request:**
+
+```http
+GET /api/dashboard/manager HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer {MANAGER_TOKEN}
+```
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "store": {
+      "_id": "65f1234567890abcdef11111",
+      "Ten_chi_nhanh": "Chi nhánh Quận 1"
+    },
+    "summary": {
+      "totalStoreTasks": 25,
+      "totalUserTasks": 125,
+      "totalEmployees": 15,
+      "storeCompletionRate": 82.5
+    },
+    "tasksByStatus": {
+      "pending": 5,
+      "accepted": 2,
+      "in_progress": 35,
+      "submitted": 8,
+      "approved": 65,
+      "rejected": 10,
+      "overdue": 3
+    },
+    "pendingReviews": [
+      {
+        "_id": "65fa123456789abcdef00001",
+        "broadcastTitle": "Kiểm tra vệ sinh tháng 3",
+        "employeeName": "Nguyễn Văn A",
+        "submittedAt": "2026-03-25T14:30:00.000Z",
+        "daysWaiting": 2
+      }
+    ],
+    "employeePerformance": [
+      {
+        "employeeId": "65f1234567890abcdef12346",
+        "employeeName": "Nguyễn Văn A",
+        "tasksCompleted": 28,
+        "tasksInProgress": 5,
+        "averageRating": 4.5,
+        "completionRate": 85
+      }
+    ]
+  }
+}
+```
+
+**Implementation:**
+- File: `src/controllers/dashboardController.js`
+- Function: `getManagerDashboard()`
+
+**cURL Example:**
+
+```bash
+curl -X GET http://localhost:5000/api/dashboard/manager \
+  -H "Authorization: Bearer MANAGER_TOKEN"
+```
+
+**Notes:**
+- Manager chỉ xem stats của store mình (filter by manager.ID_Branch)
+- Pending reviews = submitted UserTasks cần approval
+- Employee performance sorted by completionRate DESC
+- Average rating calculated from approved tasks
+
+⚠️ **AUTHORIZATION LOGIC (Rule 7):**
+- Chỉ show data của **store mình**:
+  ```javascript
+  const manager = await Employee.findById(req.user._id).populate('ID_Branch');
+  const storeId = manager.ID_Branch._id;
+  
+  const storeTasks = await StoreTask.find({ storeId });
+  const employees = await Employee.find({ ID_Branch: storeId });
+  ```
+
+---
 
 ### GET /api/dashboard/employee
-- **Description:** Get employee dashboard data
-- **Access:** Private (Employee only)
-- **Middleware:** `authenticate`, `authorize('employee')`
-- **Controller:** `getEmployeeDashboard()`
-- **Response:**
-  - My tasks
-  - Overdue tasks
-  - Completion history
+
+**Mô tả:** Lấy dashboard stats cho Employee (personal tasks)
+
+**Access:** 🔒 Employee only  
+
+**Request:**
+
+```http
+GET /api/dashboard/employee HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer {EMPLOYEE_TOKEN}
+```
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "summary": {
+      "totalTasks": 45,
+      "tasksCompleted": 35,
+      "tasksInProgress": 8,
+      "tasksOverdue": 2,
+      "completionRate": 77.8,
+      "averageRating": 4.2
+    },
+    "myTasks": [
+      {
+        "_id": "65fa123456789abcdef00001",
+        "broadcastTitle": "Kiểm tra vệ sinh tháng 3",
+        "status": "in_progress",
+        "priority": "high",
+        "deadline": "2026-03-31T23:59:59.000Z",
+        "progress": 50,
+        "isOverdue": false,
+        "daysUntilDeadline": 4
+      }
+    ],
+    "overdueTasks": [
+      {
+        "_id": "65fa123456789abcdef00003",
+        "broadcastTitle": "Báo cáo doanh thu tháng 2",
+        "status": "in_progress",
+        "deadline": "2026-03-15T23:59:59.000Z",
+        "daysOverdue": 12
+      }
+    ],
+    "recentCompleted": [
+      {
+        "_id": "65fa123456789abcdef00002",
+        "broadcastTitle": "Kiểm tra kho hàng",
+        "completedAt": "2026-03-18T16:00:00.000Z",
+        "rating": 5,
+        "reviewNote": "Làm tốt lắm!"
+      }
+    ]
+  }
+}
+```
+
+**Implementation:**
+- File: `src/controllers/dashboardController.js`
+- Function: `getEmployeeDashboard()`
+
+**cURL Example:**
+
+```bash
+curl -X GET http://localhost:5000/api/dashboard/employee \
+  -H "Authorization: Bearer EMPLOYEE_TOKEN"
+```
+
+**Notes:**
+- Employee chỉ xem tasks của chính mình (filter by employeeId = req.user._id)
+- My tasks: in_progress + submitted, sorted by deadline ASC
+- Overdue tasks: deadline < current date AND status NOT approved
+- Recent completed: limit 5, sorted by completedAt DESC
+- Average rating from approved tasks
+
+⚠️ **AUTHORIZATION LOGIC (Rule 7):**
+- Chỉ show **own tasks**:
+  ```javascript
+  const employeeId = req.user._id;
+  const tasks = await UserTask.find({ employeeId });
+  ```
+- Không xem được tasks của người khác
 
 ---
 
@@ -2417,34 +3873,232 @@ curl -X POST http://localhost:5000/api/my-tasks/65fa123456789abcdef00001/submit 
 **Controller:** `src/controllers/notificationController.js`
 
 ### GET /api/notifications
-- **Description:** Get user's notifications with pagination and filters
-- **Access:** Private (Authenticated)
-- **Middleware:** `authenticate`
-- **Controller:** `getNotifications()`
-- **Query Params:**
-  - `type` - Filter by notification type
-  - `isRead` - Filter by read status
-  - `page`, `limit` - Pagination
+
+**Mô tả:** Lấy danh sách notifications của user hiện tại
+
+**Access:** 🔒 Private (All authenticated)  
+
+**Request:**
+
+```http
+GET /api/notifications?type=task_assigned&isRead=false&page=1&limit=20 HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer {TOKEN}
+```
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `type` | string | ❌ No | Filter: 'task_assigned' \| 'task_submitted' \| 'task_approved' \| 'task_rejected' |
+| `isRead` | boolean | ❌ No | Filter: true (read) \| false (unread) |
+| `page` | number | ❌ No | Page number (default: 1) |
+| `limit` | number | ❌ No | Items per page (default: 20, max: 100) |
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "notifications": [
+      {
+        "_id": "65fc123456789abcdef00001",
+        "userId": "65f1234567890abcdef12346",
+        "type": "task_assigned",
+        "title": "Task mới được giao",
+        "message": "Bạn được giao task: Kiểm tra vệ sinh tháng 3",
+        "data": {
+          "taskId": "65fa123456789abcdef00001",
+          "broadcastTitle": "Kiểm tra vệ sinh tháng 3"
+        },
+        "isRead": false,
+        "createdAt": "2026-03-20T10:00:00.000Z"
+      }
+    ],
+    "pagination": {
+      "currentPage": 1,
+      "totalPages": 3,
+      "totalItems": 52,
+      "itemsPerPage": 20
+    },
+    "unreadCount": 15
+  }
+}
+```
+
+**Implementation:**
+- File: `src/controllers/notificationController.js`
+- Function: `getNotifications()`
+
+**cURL Example:**
+
+```bash
+curl -X GET "http://localhost:5000/api/notifications?isRead=false" \
+  -H "Authorization: Bearer TOKEN"
+```
+
+**Notes:**
+- User chỉ xem được notifications của mình (filter by userId = req.user._id)
+- Notifications sorted by createdAt DESC (mới nhất đầu tiên)
+- `data` field chứa contextual info (taskId, broadcastTitle, etc.)
+
+---
 
 ### GET /api/notifications/unread/count
-- **Description:** Get unread notification count
-- **Access:** Private (Authenticated)
-- **Middleware:** `authenticate`
-- **Controller:** `getUnreadCount()`
-- **Response:** `{ count }`
+
+**Mô tả:** Lấy số lượng notifications chưa đọc
+
+**Access:** 🔒 Private (All authenticated)  
+
+**Request:**
+
+```http
+GET /api/notifications/unread/count HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer {TOKEN}
+```
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "count": 15
+  }
+}
+```
+
+**Implementation:**
+- File: `src/controllers/notificationController.js`
+- Function: `getUnreadCount()`
+
+**cURL Example:**
+
+```bash
+curl -X GET http://localhost:5000/api/notifications/unread/count \
+  -H "Authorization: Bearer TOKEN"
+```
+
+**Notes:**
+- Dùng để hiển badge count trên UI (notification bell icon)
+- Chỉ count notifications của current user với isRead=false
+- Real-time update khi có notification mới (nếu có WebSocket)
+
+---
 
 ### PUT /api/notifications/read-all
-- **Description:** Mark all notifications as read
-- **Access:** Private (Authenticated)
-- **Middleware:** `authenticate`
-- **Controller:** `markAllAsRead()`
+
+**Mô tả:** Đánh dấu tất cả notifications là đã đọc
+
+**Access:** 🔒 Private (All authenticated)  
+
+**Request:**
+
+```http
+PUT /api/notifications/read-all HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer {TOKEN}
+```
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "message": "Đã đánh dấu tất cả thông báo là đã đọc",
+  "data": {
+    "modifiedCount": 15
+  }
+}
+```
+
+**Implementation:**
+- File: `src/controllers/notificationController.js`
+- Function: `markAllAsRead()`
+
+**cURL Example:**
+
+```bash
+curl -X PUT http://localhost:5000/api/notifications/read-all \
+  -H "Authorization: Bearer TOKEN"
+```
+
+**Notes:**
+- Update tất cả notifications của user: `isRead = true`
+- `modifiedCount` = số notifications được update
+- Dùng khi user click "Mark all as read" button
+
+---
 
 ### PUT /api/notifications/:id/read
-- **Description:** Mark specific notification as read
-- **Access:** Private (Authenticated)
-- **Middleware:** `authenticate`
-- **Controller:** `markAsRead()`
-- **Params:** `id` - Notification ObjectId
+
+**Mô tả:** Đánh dấu 1 notification là đã đọc
+
+**Access:** 🔒 Private (All authenticated)  
+
+**Request:**
+
+```http
+PUT /api/notifications/65fc123456789abcdef00001/read HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer {TOKEN}
+```
+
+**Path Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | ObjectId | ✅ Yes | Notification ObjectId |
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "message": "Thông báo đã được đánh dấu là đã đọc",
+  "data": {
+    "_id": "65fc123456789abcdef00001",
+    "isRead": true,
+    "readAt": "2026-03-20T11:00:00.000Z"
+  }
+}
+```
+
+**Response 403 (Not Own Notification):**
+
+```json
+{
+  "success": false,
+  "message": "Bạn không có quyền đánh dấu notification này"
+}
+```
+
+**Response 404 (Notification Not Found):**
+
+```json
+{
+  "success": false,
+  "message": "Không tìm thấy notification"
+}
+```
+
+**Implementation:**
+- File: `src/controllers/notificationController.js`
+- Function: `markAsRead()`
+
+**cURL Example:**
+
+```bash
+curl -X PUT http://localhost:5000/api/notifications/65fc123456789abcdef00001/read \
+  -H "Authorization: Bearer TOKEN"
+```
+
+**Notes:**
+- User chỉ mark được own notifications (validate userId = req.user._id)
+- Set `isRead = true` và `readAt = current timestamp`
+- Dùng khi user click vào notification item
 
 ---
 
@@ -2460,49 +4114,353 @@ curl -X POST http://localhost:5000/api/my-tasks/65fa123456789abcdef00001/submit 
 - Videos: 50MB
 - Documents: 5MB
 
+---
+
 ### POST /api/upload
-- **Description:** Upload a single file (any supported type)
-- **Access:** Private (Authenticated)
-- **Middleware:** `authenticate`, `uploadSingle`, `validateFileSize`
-- **Controller:** `uploadFile()`
-- **Body:** `file` (multipart/form-data)
-- **Response:** `{ url, filename, size, mimeType }`
+
+**Mô tả:** Upload 1 file bất kỳ (image/video/document)
+
+**Access:** 🔒 Private (All authenticated)  
+
+**Request:**
+
+```http
+POST /api/upload HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer {TOKEN}
+Content-Type: multipart/form-data
+
+--boundary
+Content-Disposition: form-data; name="file"; filename="image.jpg"
+Content-Type: image/jpeg
+
+<binary data>
+--boundary--
+```
+
+**Request Body (multipart/form-data):**
+- Field name: `file`
+- File types: image/*, video/*, application/pdf
+- Max size: 50MB
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "message": "File uploaded successfully",
+  "data": {
+    "url": "https://example.com/uploads/1710840000000-image.jpg",
+    "filename": "image.jpg",
+    "originalName": "my-photo.jpg",
+    "size": 2048576,
+    "mimeType": "image/jpeg",
+    "uploadedAt": "2026-03-20T12:00:00.000Z"
+  }
+}
+```
+
+**Response 400 (File validation error):**
+
+```json
+{
+  "success": false,
+  "message": "File size exceeds 50MB limit"
+}
+```
+
+**cURL Example:**
+
+```bash
+curl -X POST http://localhost:5000/api/upload \
+  -H "Authorization: Bearer TOKEN" \
+  -F "file=@/path/to/file.jpg"
+```
+
+**Notes:**
+- Dùng Multer middleware để handle multipart upload
+- Files lưu trên server hoặc cloud storage (S3, Cloudinary, etc.)
+- URL returned có thể dùng ngay trong evidences hoặc attachments
+
+⚠️ **SECURITY WARNING - Rate Limiting (Rule 8):**
+- **KHÔNG có rate limiting** cho upload endpoints
+- Attack vector: Spam uploads → Storage overload
+- Workaround: Monitor disk space, implement cleanup cron job
+- Fix needed: Rate limit 50 uploads/hour per user
+- Priority: MEDIUM
+
+---
 
 ### POST /api/upload/multiple
-- **Description:** Upload multiple files (max 10)
-- **Access:** Private (Authenticated)
-- **Middleware:** `authenticate`, `uploadMultiple`, `validateFileSize`
-- **Controller:** `uploadMultiple()`
-- **Body:** `files[]` (multipart/form-data)
-- **Response:** Array of file objects
+
+**Mô tả:** Upload nhiều files cùng lúc (max 10 files)
+
+**Access:** 🔒 Private (All authenticated)  
+
+**Request:**
+
+```http
+POST /api/upload/multiple HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer {TOKEN}
+Content-Type: multipart/form-data
+
+--boundary
+Content-Disposition: form-data; name="files"; filename="image1.jpg"
+[binary data]
+--boundary
+Content-Disposition: form-data; name="files"; filename="image2.jpg"
+[binary data]
+--boundary--
+```
+
+**Request Body (multipart/form-data):**
+- Field name: `files` (array)
+- Max files: 10
+- Max size per file: 50MB
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "message": "Uploaded 3 files successfully",
+  "data": {
+    "files": [
+      {
+        "url": "https://example.com/uploads/1710840000000-image1.jpg",
+        "filename": "image1.jpg",
+        "size": 1024000,
+        "mimeType": "image/jpeg"
+      },
+      {
+        "url": "https://example.com/uploads/1710840000001-image2.jpg",
+        "filename": "image2.jpg",
+        "size": 2048000,
+        "mimeType": "image/jpeg"
+      }
+    ],
+    "totalSize": 3072000,
+    "count": 2
+  }
+}
+```
+
+**cURL Example:**
+
+```bash
+curl -X POST http://localhost:5000/api/upload/multiple \
+  -H "Authorization: Bearer TOKEN" \
+  -F "files=@/path/to/file1.jpg" \
+  -F "files=@/path/to/file2.jpg"
+```
+
+**Notes:**
+- Tối đa 10 files per request
+- Tổng size < 500MB recommended
+- Partial success KHÔNG support - tất cả upload hoặc không upload gì
+
+---
 
 ### POST /api/upload/photo
-- **Description:** Upload a single photo
-- **Access:** Private (Authenticated)
-- **Middleware:** `authenticate`, `uploadPhoto`, `validateFileSize`
-- **Controller:** `uploadPhoto()`
-- **Body:** `photo` (multipart/form-data, image only)
+
+**Mô tả:** Upload 1 ảnh (image only)
+
+**Access:** 🔒 Private (All authenticated)  
+
+**Request Body (multipart/form-data):**
+- Field name: `photo`
+- File types: image/* (jpg, png, gif, webp)
+- Max size: 10MB
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "url": "https://example.com/uploads/photo-1710840000000.jpg",
+    "filename": "photo.jpg",
+    "size": 512000,
+    "mimeType": "image/jpeg",
+    "dimensions": {
+      "width": 1920,
+      "height": 1080
+    }
+  }
+}
+```
+
+**cURL Example:**
+
+```bash
+curl -X POST http://localhost:5000/api/upload/photo \
+  -H "Authorization: Bearer TOKEN" \
+  -F "photo=@/path/to/photo.jpg"
+```
+
+**Notes:**
+- Chỉ accept image MIME types
+- Optional: Auto-resize hoặc compress nếu quá lớn
+- Optional: Generate thumbnail
+
+---
 
 ### POST /api/upload/photos
-- **Description:** Upload multiple photos (max 5)
-- **Access:** Private (Authenticated)
-- **Middleware:** `authenticate`, `uploadPhotos`, `validateFileSize`
-- **Controller:** `uploadPhotos()`
-- **Body:** `photos[]` (multipart/form-data, images only)
+
+**Mô tả:** Upload nhiều ảnh cùng lúc (max 5 photos)
+
+**Access:** 🔒 Private (All authenticated)  
+
+**Request Body (multipart/form-data):**
+- Field name: `photos` (array)
+- File types: image/* only
+- Max files: 5
+- Max size per file: 10MB
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "message": "Uploaded 3 photos successfully",
+  "data": {
+    "photos": [
+      {
+        "url": "https://example.com/uploads/photo1.jpg",
+        "filename": "photo1.jpg",
+        "size": 512000
+      },
+      {
+        "url": "https://example.com/uploads/photo2.jpg",
+        "filename": "photo2.jpg",
+        "size": 768000
+      }
+    ],
+    "count": 2
+  }
+}
+```
+
+**cURL Example:**
+
+```bash
+curl -X POST http://localhost:5000/api/upload/photos \
+  -H "Authorization: Bearer TOKEN" \
+  -F "photos=@/path/to/photo1.jpg" \
+  -F "photos=@/path/to/photo2.jpg"
+```
+
+**Notes:**
+- Dùng cho evidence upload (UserTask.evidences)
+- Max 5 photos để tránh quá tải
+- Recommended: Compress images trước khi upload (frontend)
+
+---
 
 ### POST /api/upload/video
-- **Description:** Upload a single video
-- **Access:** Private (Authenticated)
-- **Middleware:** `authenticate`, `uploadVideo`, `validateFileSize`
-- **Controller:** `uploadVideo()`
-- **Body:** `video` (multipart/form-data, video only)
+
+**Mô tả:** Upload 1 video
+
+**Access:** 🔒 Private (All authenticated)  
+
+**Request Body (multipart/form-data):**
+- Field name: `video`
+- File types: video/* (mp4, mov, avi, webm)
+- Max size: 50MB
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "url": "https://example.com/uploads/video-1710840000000.mp4",
+    "filename": "video.mp4",
+    "size": 25600000,
+    "mimeType": "video/mp4",
+    "duration": 120
+  }
+}
+```
+
+**Response 400 (File too large):**
+
+```json
+{
+  "success": false,
+  "message": "Video size exceeds 50MB limit. Please compress the video."
+}
+```
+
+**cURL Example:**
+
+```bash
+curl -X POST http://localhost:5000/api/upload/video \
+  -H "Authorization: Bearer TOKEN" \
+  -F "video=@/path/to/video.mp4"
+```
+
+**Notes:**
+- 50MB limit có thể nhỏ cho video dài
+- Recommended: Frontend compress video trước upload
+- Optional: Generate video thumbnail
+- Optional: Transcode to standard format (mp4 H.264)
+
+⚠️ **PERFORMANCE WARNING:**
+- Video uploads có thể mất thời gian (50MB @ 5Mbps = ~80 seconds)
+- Frontend nên show progress bar
+- Consider upload to cloud storage (S3, Cloudinary) thay vì local server
+
+---
 
 ### POST /api/upload/document
-- **Description:** Upload a single document (PDF)
-- **Access:** Private (Authenticated)
-- **Middleware:** `authenticate`, `uploadDocument`, `validateFileSize`
-- **Controller:** `uploadDocument()`
-- **Body:** `document` (multipart/form-data, PDF only)
+
+**Mô tả:** Upload 1 document (PDF only)
+
+**Access:** 🔒 Private (All authenticated)  
+
+**Request Body (multipart/form-data):**
+- Field name: `document`
+- File types: application/pdf only
+- Max size: 5MB
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "url": "https://example.com/uploads/document-1710840000000.pdf",
+    "filename": "guide.pdf",
+    "size": 2048000,
+    "mimeType": "application/pdf",
+    "pages": 15
+  }
+}
+```
+
+**Response 400 (Invalid file type):**
+
+```json
+{
+  "success": false,
+  "message": "Only PDF files are allowed"
+}
+```
+
+**cURL Example:**
+
+```bash
+curl -X POST http://localhost:5000/api/upload/document \
+  -H "Authorization: Bearer TOKEN" \
+  -F "document=@/path/to/guide.pdf"
+```
+
+**Notes:**
+- Chỉ accept PDF (application/pdf MIME type)
+- Dùng cho broadcast attachments (hướng dẫn, checklist)
+- Optional: Extract text hoặc metadata từ PDF
 
 ---
 
@@ -2510,22 +4468,184 @@ curl -X POST http://localhost:5000/api/my-tasks/65fa123456789abcdef00001/submit 
 
 **Base Path:** `/api/dev`  
 **File:** `src/routes/devRoutes.js`  
-**Note:** ⚠️ **ONLY for development - DISABLED in production**
+
+⚠️ **CRITICAL:** **ONLY for development - DISABLED in production**
+
+---
 
 ### GET /api/dev/accounts
-- **Description:** Get list of all active employees for quick switching
-- **Access:** Public (dev only)
-- **Controller:** Dev route handler
-- **Response:** Accounts grouped by role (admin, manager, employee)
-- **Note:** Returns 403 if `NODE_ENV === 'production'`
+
+**Mô tả:** Lấy danh sách accounts để quick switch (Dev only)
+
+**Access:** 🌐 Public (Development only)  
+
+**Request:**
+
+```http
+GET /api/dev/accounts HTTP/1.1
+Host: localhost:5000
+```
+
+**Response 200 (Success - Development):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "accounts": {
+      "admin": [
+        {
+          "_id": "65f1234567890abcdef12340",
+          "Ho_va_ten": "Admin System",
+          "So_dien_thoai": "0900000001",
+          "role": "admin"
+        }
+      ],
+      "manager": [
+        {
+          "_id": "65f1234567890abcdef12345",
+          "Ho_va_ten": "Trần Thị Manager",
+          "So_dien_thoai": "0900000010",
+          "role": "manager",
+          "storeName": "Chi nhánh Quận 1"
+        }
+      ],
+      "employee": [
+        {
+          "_id": "65f1234567890abcdef12346",
+          "Ho_va_ten": "Nguyễn Văn A",
+          "So_dien_thoai": "0987654321",
+          "role": "employee",
+          "storeName": "Chi nhánh Quận 1"
+        }
+      ]
+    }
+  }
+}
+```
+
+**Response 403 (Production):**
+
+```json
+{
+  "success": false,
+  "message": "Dev tools are disabled in production"
+}
+```
+
+**Implementation:**
+- File: `src/routes/devRoutes.js`
+- Function: Inline route handler
+
+**cURL Example:**
+
+```bash
+curl -X GET http://localhost:5000/api/dev/accounts
+```
+
+**Notes:**
+- **CHỈ hoạt động khi `NODE_ENV !== 'production'`**
+- Trả về 403 nếu production environment
+- Dùng cho Account Switcher UI (dev testing)
+- Grouped by role để dễ chọn
+- Limit 5 accounts per role
+
+⚠️ **SECURITY WARNING:**
+- **TUYỆT ĐỐI** disable trong production
+- Expose tất cả employee info (security risk)
+- Check environment variable: `if (process.env.NODE_ENV === 'production') { return 403; }`
+
+---
 
 ### POST /api/dev/quick-login
-- **Description:** Quick login without password (dev only)
-- **Access:** Public (dev only)
-- **Controller:** Dev route handler
-- **Body:** `{ employeeId }` - Employee ObjectId
-- **Response:** `{ token, employee }`
-- **Note:** Returns 403 if `NODE_ENV === 'production'`
+
+**Mô tả:** Quick login không cần password (Dev only)
+
+**Access:** 🌐 Public (Development only)  
+
+**Request:**
+
+```http
+POST /api/dev/quick-login HTTP/1.1
+Host: localhost:5000
+Content-Type: application/json
+
+{
+  "employeeId": "65f1234567890abcdef12346"
+}
+```
+
+**Request Body:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `employeeId` | ObjectId | ✅ Yes | Employee ObjectId to login as |
+
+**Response 200 (Success - Development):**
+
+```json
+{
+  "success": true,
+  "message": "Quick login successful",
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "employee": {
+      "_id": "65f1234567890abcdef12346",
+      "Ho_va_ten": "Nguyễn Văn A",
+      "So_dien_thoai": "0987654321",
+      "role": "employee",
+      "ID_Branch": {
+        "_id": "65f1234567890abcdef11111",
+        "Ten_chi_nhanh": "Chi nhánh Quận 1"
+      }
+    }
+  }
+}
+```
+
+**Response 403 (Production):**
+
+```json
+{
+  "success": false,
+  "message": "Dev tools are disabled in production"
+}
+```
+
+**Response 404 (Employee Not Found):**
+
+```json
+{
+  "success": false,
+  "message": "Employee not found"
+}
+```
+
+**Implementation:**
+- File: `src/routes/devRoutes.js`
+- Function: Inline route handler
+
+**cURL Example:**
+
+```bash
+curl -X POST http://localhost:5000/api/dev/quick-login \
+  -H "Content-Type: application/json" \
+  -d '{"employeeId": "65f1234567890abcdef12346"}'
+```
+
+**Notes:**
+- **CHỈ hoạt động khi `NODE_ENV !== 'production'`**
+- KHÔNG cần password - bypass authentication
+- Generate JWT token ngay lập tức
+- Dùng để test với nhiều role khác nhau (admin, manager, employee)
+- Frontend: Account Switcher dropdown → Click account → Quick login
+
+⚠️ **SECURITY WARNING - CRITICAL:**
+- **TUYỆT ĐỐI** disable trong production
+- **BYPASS toàn bộ authentication** - Anyone can login as anyone!
+- **MUST CHECK:** `if (process.env.NODE_ENV === 'production') { return 403; }`
+- Nếu expose endpoint này trong production → **CRITICAL SECURITY BREACH**
+- Recommended: Remove route registration trong production build
 
 ---
 
