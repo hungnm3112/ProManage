@@ -47,7 +47,13 @@
    - Rules: NEVER code without MD first
    - Templates và checklists
 
-7. **[CHANGELOG.md](CHANGELOG.md)**  
+7. **[FEATURE-CHECKLIST.md](FEATURE-CHECKLIST.md)** 📝  
+   **Template feature mới** - Checklist đầy đủ cho mọi feature
+   - Copy template này khi bắt đầu feature
+   - Track progress qua 6 bước
+   - Example walkthrough thực tế
+
+8. **[CHANGELOG.md](CHANGELOG.md)**  
    **Lịch sử thay đổi** - Track tất cả updates
    - Feature additions
    - Bug fixes

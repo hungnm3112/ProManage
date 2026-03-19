@@ -7,6 +7,13 @@ và project tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Added
+- **FEATURE-CHECKLIST.md**: Template đầy đủ cho feature development
+  - Checklist 6 bước chi tiết
+  - Example walkthrough (Schedule Broadcast)
+  - Debug scenarios và solutions
+  - Time tracking template
+
 ### Planned
 - Unit tests cho tất cả endpoints
 - Recurring broadcasts auto-publish
