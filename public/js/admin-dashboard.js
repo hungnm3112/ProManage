@@ -174,6 +174,17 @@ async function loadTaskList(status) {
       const completionPercent = calculateCompletionPercent(task);
       const statusBadge = getTaskStatusBadge(task.status);
       const canEdit = task.status !== 'approved'; // Cannot edit completed tasks
+      const hasUserTask = !!task.userTaskId; // Check if task has been assigned to employee
+      
+      // Debug logging
+      if (!hasUserTask) {
+        console.log('[Task without UserTask]', { 
+          broadcastTitle: task.broadcastTitle, 
+          status: task.status, 
+          userTaskId: task.userTaskId,
+          employeeName: task.employeeName 
+        });
+      }
       
       return `
         <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 hover:bg-gray-100 transition-colors">
@@ -187,24 +198,25 @@ async function loadTaskList(status) {
           <div class="text-sm text-gray-600 mb-2">
             <p><span class="font-medium">Chi nhánh:</span> ${task.storeName || 'N/A'}</p>
             ${task.managerName ? `<p><span class="font-medium">Quản lý:</span> ${task.managerName}</p>` : ''}
-            ${task.employeeName ? `<p><span class="font-medium">Nhân viên:</span> ${task.employeeName}</p>` : ''}
+            ${task.employeeName ? `<p><span class="font-medium">Nhân viên:</span> ${task.employeeName}</p>` : '<p class="text-amber-600 italic font-medium">⚠️ Chưa giao cho nhân viên</p>'}
           </div>
           <div class="flex items-center justify-between">
             <div class="flex-1">
               <div class="flex items-center justify-between text-xs text-gray-600 mb-1">
                 <span>Completion: ${completionPercent}%</span>
-                ${canEdit ? `
+                ${hasUserTask && canEdit ? `
                   <div class="flex gap-2">
-                    <button class="edit-details-btn text-blue-600 hover:text-blue-800 font-medium" data-task-id="${task._id}" title="Sửa chi tiết công việc">
-                      <i class="fas fa-file-alt"></i> Sửa chi tiết
+                    <button class="edit-details-btn text-blue-600 hover:text-blue-800 font-medium" data-task-id="${task.userTaskId}" title="Sửa hoặc giao lại công việc">
+                      <i class="fas fa-edit"></i> Sửa/Giao lại
                     </button>
-                    <button class="edit-reassign-btn text-purple-600 hover:text-purple-800 font-medium" data-task-id="${task._id}" title="Giao lại công việc">
-                      <i class="fas fa-share-alt"></i> Giao lại
-                    </button>
-                    <button class="delete-task-btn text-red-600 hover:text-red-800 font-medium" data-task-id="${task._id}" title="Xóa task">
+                    <button class="delete-task-btn text-red-600 hover:text-red-800 font-medium" data-task-id="${task.userTaskId}" title="Xóa task">
                       <i class="fas fa-trash"></i> Xóa
                     </button>
                   </div>
+                ` : !hasUserTask && canEdit ? `
+                  <span class="text-amber-600 text-xs font-medium italic">
+                    <i class="fas fa-info-circle"></i> Vui lòng giao task cho nhân viên từ modal "Giao việc" trước
+                  </span>
                 ` : ''}
               </div>
               <div class="w-full bg-gray-200 rounded-full h-2">
@@ -222,17 +234,21 @@ async function loadTaskList(status) {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const taskId = btn.getAttribute('data-task-id');
-        const task = tasks.find(t => t._id === taskId);
-        if (task) openEditTaskDetailsModal(task);
-      });
-    });
-    
-    document.querySelectorAll('.edit-reassign-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const taskId = btn.getAttribute('data-task-id');
-        const task = tasks.find(t => t._id === taskId);
-        if (task) openEditTaskReassignModal(task);
+        const task = tasks.find(t => t.userTaskId === taskId);
+        
+        console.log('[Edit Button Click]', { taskId, task, hasUserTaskId: !!task?.userTaskId });
+        
+        if (!task) {
+          alert('Không tìm thấy task. Vui lòng refresh trang.');
+          return;
+        }
+        
+        if (!task.userTaskId) {
+          alert('Task này chưa được giao cho nhân viên nào. Vui lòng dùng modal "Giao việc" để giao task trước.');
+          return;
+        }
+        
+        openEditTaskDetailsModal(task);
       });
     });
     
@@ -240,8 +256,19 @@ async function loadTaskList(status) {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const taskId = btn.getAttribute('data-task-id');
-        const task = tasks.find(t => t._id === taskId);
-        if (task) handleDeleteTask(task);
+        const task = tasks.find(t => t.userTaskId === taskId);
+        
+        if (!task) {
+          alert('Không tìm thấy task. Vui lòng refresh trang.');
+          return;
+        }
+        
+        if (!task.userTaskId) {
+          alert('Task này chưa được giao cho nhân viên nào. Không thể xóa.');
+          return;
+        }
+        
+        handleDeleteTask(task);
       });
     });
     
@@ -600,10 +627,9 @@ document.getElementById('onetimeTime').addEventListener('change', updateDeadline
 document.getElementById('dailyTime').addEventListener('change', updateDeadlinePreview);
 document.getElementById('weeklyDay').addEventListener('change', updateDeadlinePreview);
 document.getElementById('weeklyTime').addEventListener('change', updateDeadlinePreview);
-document.getElementById('monthlyDay').addEventListener('change', updateDeadlinePreview);
+document.getElementById('monthlyDate').addEventListener('change', updateDeadlinePreview);
 document.getElementById('monthlyTime').addEventListener('change', updateDeadlinePreview);
-document.getElementById('yearlyMonth').addEventListener('change', updateDeadlinePreview);
-document.getElementById('yearlyDay').addEventListener('change', updateDeadlinePreview);
+document.getElementById('yearlyDate').addEventListener('change', updateDeadlinePreview);
 document.getElementById('yearlyTime').addEventListener('change', updateDeadlinePreview);
 
 // Update Deadline Preview
@@ -665,52 +691,55 @@ function updateDeadlinePreview() {
         break;
         
       case 'monthly':
-        const monthlyDay = document.getElementById('monthlyDay').value;
+        const monthlyDate = document.getElementById('monthlyDate').value;
         const monthlyTime = document.getElementById('monthlyTime').value;
+        
+        if (!monthlyDate || !monthlyTime) {
+          deadlinePreview.textContent = 'Vui lòng chọn ngày và giờ';
+          return;
+        }
+        
+        const monthlySelected = new Date(`${monthlyDate}T${monthlyTime}`);
+        const monthlyDayOfMonth = monthlySelected.getDate();
         const [monthlyHours, monthlyMinutes] = monthlyTime.split(':');
         
         nextDeadline = new Date();
         nextDeadline.setHours(parseInt(monthlyHours), parseInt(monthlyMinutes), 0, 0);
+        nextDeadline.setDate(monthlyDayOfMonth);
         
-        if (monthlyDay === 'last') {
-          // Last day of month
-          nextDeadline.setMonth(nextDeadline.getMonth() + 1, 0);
-        } else {
-          nextDeadline.setDate(parseInt(monthlyDay));
-          
-          if (nextDeadline <= now) {
-            nextDeadline.setMonth(nextDeadline.getMonth() + 1);
-          }
+        // If deadline passed this month, move to next month
+        if (nextDeadline <= now) {
+          nextDeadline.setMonth(nextDeadline.getMonth() + 1);
         }
         
-        const dayText = monthlyDay === 'last' ? 'cuối tháng' : `ngày ${monthlyDay}`;
-        description = `(${dayText} hàng tháng lúc ${monthlyTime})`;
+        description = `(ngày ${monthlyDayOfMonth} hàng tháng lúc ${monthlyTime})`;
         break;
         
       case 'yearly':
-        const yearlyMonth = parseInt(document.getElementById('yearlyMonth').value);
-        const yearlyDay = document.getElementById('yearlyDay').value;
+        const yearlyDate = document.getElementById('yearlyDate').value;
         const yearlyTime = document.getElementById('yearlyTime').value;
+        
+        if (!yearlyDate || !yearlyTime) {
+          deadlinePreview.textContent = 'Vui lòng chọn ngày và giờ';
+          return;
+        }
+        
+        const yearlySelected = new Date(`${yearlyDate}T${yearlyTime}`);
+        const yearlyMonth = yearlySelected.getMonth() + 1; // 1-based
+        const yearlyDayOfMonth = yearlySelected.getDate();
         const [yearlyHours, yearlyMinutes] = yearlyTime.split(':');
         
         nextDeadline = new Date();
-        nextDeadline.setMonth(yearlyMonth - 1); // Month is 0-indexed
+        nextDeadline.setMonth(yearlyMonth - 1); // Convert to 0-based
+        nextDeadline.setDate(yearlyDayOfMonth);
         nextDeadline.setHours(parseInt(yearlyHours), parseInt(yearlyMinutes), 0, 0);
-        
-        if (yearlyDay === 'last') {
-          // Last day of month
-          nextDeadline.setMonth(yearlyMonth, 0);
-        } else {
-          nextDeadline.setDate(parseInt(yearlyDay));
-        }
         
         // If date already passed this year, move to next year
         if (nextDeadline <= now) {
           nextDeadline.setFullYear(nextDeadline.getFullYear() + 1);
         }
         
-        const yearlyDayText = yearlyDay === 'last' ? 'cuối tháng' : `ngày ${yearlyDay}`;
-        description = `(${yearlyDayText}/tháng ${yearlyMonth} hàng năm lúc ${yearlyTime})`;
+        description = `(ngày ${yearlyDayOfMonth}/tháng ${yearlyMonth} hàng năm lúc ${yearlyTime})`;
         break;
     }
     
@@ -817,45 +846,52 @@ async function saveBroadcast(status = 'draft') {
         break;
         
       case 'monthly':
-        const monthlyDay = document.getElementById('monthlyDay').value;
+        const monthlyDate = document.getElementById('monthlyDate').value;
         const monthlyTime = document.getElementById('monthlyTime').value;
+        
+        if (!monthlyDate || !monthlyTime) {
+          alert('Vui lòng chọn ngày và giờ cho deadline lặp lại theo tháng');
+          return;
+        }
+        
+        const monthlySelected = new Date(`${monthlyDate}T${monthlyTime}`);
+        const monthlyDayOfMonth = monthlySelected.getDate();
         const [monthlyHours, monthlyMinutes] = monthlyTime.split(':');
         
         deadline = new Date();
         deadline.setHours(parseInt(monthlyHours), parseInt(monthlyMinutes), 0, 0);
+        deadline.setDate(monthlyDayOfMonth);
         
-        if (monthlyDay === 'last') {
-          deadline.setMonth(deadline.getMonth() + 1, 0);
-        } else {
-          deadline.setDate(parseInt(monthlyDay));
-          if (deadline <= new Date()) {
-            deadline.setMonth(deadline.getMonth() + 1);
-          }
+        if (deadline <= new Date()) {
+          deadline.setMonth(deadline.getMonth() + 1);
         }
         
         recurringData.enabled = true;
         recurringData.frequency = 'monthly';
         recurringData.pattern = {
-          dayOfMonth: monthlyDay === 'last' ? 'last' : parseInt(monthlyDay),
+          dayOfMonth: monthlyDayOfMonth,
           time: monthlyTime
         };
         break;
         
       case 'yearly':
-        const yearlyMonth = parseInt(document.getElementById('yearlyMonth').value);
-        const yearlyDay = document.getElementById('yearlyDay').value;
+        const yearlyDate = document.getElementById('yearlyDate').value;
         const yearlyTime = document.getElementById('yearlyTime').value;
+        
+        if (!yearlyDate || !yearlyTime) {
+          alert('Vui lòng chọn ngày và giờ cho deadline lặp lại theo năm');
+          return;
+        }
+        
+        const yearlySelected = new Date(`${yearlyDate}T${yearlyTime}`);
+        const yearlyMonth = yearlySelected.getMonth() + 1; // 1-based for backend
+        const yearlyDayOfMonth = yearlySelected.getDate();
         const [yearlyHours, yearlyMinutes] = yearlyTime.split(':');
         
         deadline = new Date();
-        deadline.setMonth(yearlyMonth - 1);
+        deadline.setMonth(yearlyMonth - 1); // Convert to 0-based
+        deadline.setDate(yearlyDayOfMonth);
         deadline.setHours(parseInt(yearlyHours), parseInt(yearlyMinutes), 0, 0);
-        
-        if (yearlyDay === 'last') {
-          deadline.setMonth(yearlyMonth, 0);
-        } else {
-          deadline.setDate(parseInt(yearlyDay));
-        }
         
         if (deadline <= new Date()) {
           deadline.setFullYear(deadline.getFullYear() + 1);
@@ -865,7 +901,7 @@ async function saveBroadcast(status = 'draft') {
         recurringData.frequency = 'yearly';
         recurringData.pattern = {
           month: yearlyMonth,
-          dayOfMonth: yearlyDay === 'last' ? 'last' : parseInt(yearlyDay),
+          dayOfMonth: yearlyDayOfMonth,
           time: yearlyTime
         };
         break;
@@ -950,6 +986,8 @@ function resetForm() {
   document.getElementById('weeklyDay').value = '6';
   document.getElementById('weeklyTime').value = '17:00';
   document.getElementById('monthlyDay').value = '2';
+  document.getElementById('monthlyDay').disabled = false;
+  document.getElementById('monthlyLastDay').checked = false;
   document.getElementById('monthlyTime').value = '10:00';
   document.getElementById('yearlyMonth').value = '1';
   document.getElementById('yearlyDay').value = '15';
@@ -1719,10 +1757,9 @@ const editOnetimeTime = document.getElementById('editOnetimeTime');
 const editDailyTime = document.getElementById('editDailyTime');
 const editWeeklyDay = document.getElementById('editWeeklyDay');
 const editWeeklyTime = document.getElementById('editWeeklyTime');
-const editMonthlyDay = document.getElementById('editMonthlyDay');
+const editMonthlyDate = document.getElementById('editMonthlyDate');
 const editMonthlyTime = document.getElementById('editMonthlyTime');
-const editYearlyMonth = document.getElementById('editYearlyMonth');
-const editYearlyDay = document.getElementById('editYearlyDay');
+const editYearlyDate = document.getElementById('editYearlyDate');
 const editYearlyTime = document.getElementById('editYearlyTime');
 const editDeadlinePreview = document.getElementById('editDeadlinePreview');
 
@@ -1823,31 +1860,49 @@ function updateEditDeadlinePreview() {
     deadline.setDate(deadline.getDate() + daysUntilTarget);
     deadline.setHours(parseInt(time.split(':')[0]), parseInt(time.split(':')[1]), 0, 0);
   } else if (type === 'monthly') {
-    const dayOfMonth = parseInt(editMonthlyDay.value) || 1;
+    const monthlyDate = editMonthlyDate.value;
     const time = editMonthlyTime.value || '08:00';
+    
+    if (!monthlyDate) {
+      editDeadlinePreview.textContent = 'Vui lòng chọn ngày';
+      return;
+    }
+    
+    const selectedDate = new Date(`${monthlyDate}T${time}`);
+    const dayOfMonth = selectedDate.getDate();
     
     const today = new Date();
     let nextDate = new Date(today.getFullYear(), today.getMonth(), dayOfMonth);
+    nextDate.setHours(parseInt(time.split(':')[0]), parseInt(time.split(':')[1]), 0, 0);
     
     if (nextDate <= today) {
       nextDate = new Date(today.getFullYear(), today.getMonth() + 1, dayOfMonth);
+      nextDate.setHours(parseInt(time.split(':')[0]), parseInt(time.split(':')[1]), 0, 0);
     }
     
-    nextDate.setHours(parseInt(time.split(':')[0]), parseInt(time.split(':')[1]), 0, 0);
     deadline = nextDate;
   } else if (type === 'yearly') {
-    const month = (parseInt(editYearlyMonth.value) || 1) - 1; // Convert 1-based to 0-based
-    const day = parseInt(editYearlyDay.value) || 1;
+    const yearlyDate = editYearlyDate.value;
     const time = editYearlyTime.value || '08:00';
     
-    const today = new Date();
-    let nextDate = new Date(today.getFullYear(), month, day);
-    
-    if (nextDate <= today) {
-      nextDate = new Date(today.getFullYear() + 1, month, day);
+    if (!yearlyDate) {
+      editDeadlinePreview.textContent = 'Vui lòng chọn ngày';
+      return;
     }
     
+    const selectedDate = new Date(`${yearlyDate}T${time}`);
+    const month = selectedDate.getMonth(); // 0-based
+    const dayOfMonth = selectedDate.getDate();
+    
+    const today = new Date();
+    let nextDate = new Date(today.getFullYear(), month, dayOfMonth);
     nextDate.setHours(parseInt(time.split(':')[0]), parseInt(time.split(':')[1]), 0, 0);
+    
+    if (nextDate <= today) {
+      nextDate = new Date(today.getFullYear() + 1, month, dayOfMonth);
+      nextDate.setHours(parseInt(time.split(':')[0]), parseInt(time.split(':')[1]), 0, 0);
+    }
+    
     deadline = nextDate;
   }
   
@@ -1865,10 +1920,9 @@ editOnetimeTime.addEventListener('change', updateEditDeadlinePreview);
 editDailyTime.addEventListener('change', updateEditDeadlinePreview);
 editWeeklyDay.addEventListener('change', updateEditDeadlinePreview);
 editWeeklyTime.addEventListener('change', updateEditDeadlinePreview);
-editMonthlyDay.addEventListener('change', updateEditDeadlinePreview);
+editMonthlyDate.addEventListener('change', updateEditDeadlinePreview);
 editMonthlyTime.addEventListener('change', updateEditDeadlinePreview);
-editYearlyMonth.addEventListener('change', updateEditDeadlinePreview);
-editYearlyDay.addEventListener('change', updateEditDeadlinePreview);
+editYearlyDate.addEventListener('change', updateEditDeadlinePreview);
 editYearlyTime.addEventListener('change', updateEditDeadlinePreview);
 
 // Open edit task details modal
@@ -1949,7 +2003,10 @@ async function openEditTaskDetailsModal(task) {
     }
     
     if (fullTaskData) {
-      task = fullTaskData;
+      // Merge fullTaskData with original task to preserve employee info from dashboard API
+      // Original task has: employeeId, employeeName, employeePhone, employeeBranch, userTaskId
+      // fullTaskData has: checklist, recurring, broadcast details
+      task = { ...task, ...fullTaskData };
     } else {
     }
   } catch (error) {
@@ -1959,7 +2016,9 @@ async function openEditTaskDetailsModal(task) {
   currentEditingTask = task;
   
   // Fill form with task data
-  document.getElementById('editTaskDetailsId').value = task._id;
+  // IMPORTANT: Use userTaskId if available (from dashboard API), otherwise fallback to _id
+  const taskId = task.userTaskId || task._id;
+  document.getElementById('editTaskDetailsId').value = taskId;
   document.getElementById('editBroadcastId').value = task.broadcastId || '';
   
   // Try broadcastTitle first, then fallback to title
@@ -2000,11 +2059,19 @@ async function openEditTaskDetailsModal(task) {
     editWeeklyDay.value = pattern.dayOfWeek || 1;
     editWeeklyTime.value = pattern.time || '08:00';
   } else if (taskType === 'monthly') {
-    editMonthlyDay.value = pattern.dayOfMonth || 1;
+    // Set date input from pattern.dayOfMonth
+    const dayOfMonth = pattern.dayOfMonth || 1;
+    const today = new Date();
+    const targetDate = new Date(today.getFullYear(), today.getMonth(), dayOfMonth);
+    editMonthlyDate.value = targetDate.toISOString().split('T')[0];
     editMonthlyTime.value = pattern.time || '08:00';
   } else if (taskType === 'yearly') {
-    editYearlyMonth.value = pattern.month || 1; // Broadcast model stores month as 1-12 (1-based)
-    editYearlyDay.value = pattern.day || 1;
+    // Set date input from pattern.month and pattern.dayOfMonth
+    const month = (pattern.month || 1) - 1; // Convert to 0-based
+    const dayOfMonth = pattern.dayOfMonth || pattern.day || 1; // Support both field names
+    const today = new Date();
+    const targetDate = new Date(today.getFullYear(), month, dayOfMonth);
+    editYearlyDate.value = targetDate.toISOString().split('T')[0];
     editYearlyTime.value = pattern.time || '08:00';
   }
   
@@ -2053,6 +2120,19 @@ async function openEditTaskDetailsModal(task) {
     });
   });
   
+  // Populate current employee information
+  console.log('[populateCurrentEmployee] Task data:', {
+    employeeId: task.employeeId,
+    employeeName: task.employeeName,
+    employeePhone: task.employeePhone,
+    employeeBranch: task.employeeBranch,
+    userTaskId: task.userTaskId
+  });
+  populateCurrentEmployee(task);
+  
+  // Initialize employee selector
+  initializeEmployeeSelector();
+  
   // Show modal
   editTaskDetailsModal.classList.remove('hidden');
 }
@@ -2085,31 +2165,47 @@ function calculateEditDeadline(taskType) {
     deadline.setDate(deadline.getDate() + daysUntilTarget);
     deadline.setHours(parseInt(time.split(':')[0]), parseInt(time.split(':')[1]), 0, 0);
   } else if (taskType === 'monthly') {
-    const dayOfMonth = parseInt(editMonthlyDay.value) || 1;
+    const monthlyDate = editMonthlyDate.value;
     const time = editMonthlyTime.value || '08:00';
+    
+    if (!monthlyDate) {
+      return null;
+    }
+    
+    const selectedDate = new Date(`${monthlyDate}T${time}`);
+    const dayOfMonth = selectedDate.getDate();
     
     const today = new Date();
     let nextDate = new Date(today.getFullYear(), today.getMonth(), dayOfMonth);
+    nextDate.setHours(parseInt(time.split(':')[0]), parseInt(time.split(':')[1]), 0, 0);
     
     if (nextDate <= today) {
       nextDate = new Date(today.getFullYear(), today.getMonth() + 1, dayOfMonth);
+      nextDate.setHours(parseInt(time.split(':')[0]), parseInt(time.split(':')[1]), 0, 0);
     }
     
-    nextDate.setHours(parseInt(time.split(':')[0]), parseInt(time.split(':')[1]), 0, 0);
     deadline = nextDate;
   } else if (taskType === 'yearly') {
-    const month = (parseInt(editYearlyMonth.value) || 1) - 1; // Convert 1-based to 0-based
-    const day = parseInt(editYearlyDay.value) || 1;
+    const yearlyDate = editYearlyDate.value;
     const time = editYearlyTime.value || '08:00';
     
-    const today = new Date();
-    let nextDate = new Date(today.getFullYear(), month, day);
-    
-    if (nextDate <= today) {
-      nextDate = new Date(today.getFullYear() + 1, month, day);
+    if (!yearlyDate) {
+      return null;
     }
     
+    const selectedDate = new Date(`${yearlyDate}T${time}`);
+    const month = selectedDate.getMonth(); // 0-based
+    const dayOfMonth = selectedDate.getDate();
+    
+    const today = new Date();
+    let nextDate = new Date(today.getFullYear(), month, dayOfMonth);
     nextDate.setHours(parseInt(time.split(':')[0]), parseInt(time.split(':')[1]), 0, 0);
+    
+    if (nextDate <= today) {
+      nextDate = new Date(today.getFullYear() + 1, month, dayOfMonth);
+      nextDate.setHours(parseInt(time.split(':')[0]), parseInt(time.split(':')[1]), 0, 0);
+    }
+    
     deadline = nextDate;
   }
   
@@ -2130,16 +2226,345 @@ function buildEditRecurringData(taskType) {
     recurringData.pattern.dayOfWeek = parseInt(editWeeklyDay.value);
     recurringData.pattern.time = editWeeklyTime.value || '08:00';
   } else if (taskType === 'monthly') {
-    recurringData.pattern.dayOfMonth = parseInt(editMonthlyDay.value) || 1;
-    recurringData.pattern.time = editMonthlyTime.value || '08:00';
+    const monthlyDate = editMonthlyDate.value;
+    const time = editMonthlyTime.value || '08:00';
+    
+    if (monthlyDate) {
+      const selectedDate = new Date(`${monthlyDate}T${time}`);
+      recurringData.pattern.dayOfMonth = selectedDate.getDate();
+    } else {
+      recurringData.pattern.dayOfMonth = 1;
+    }
+    
+    recurringData.pattern.time = time;
   } else if (taskType === 'yearly') {
-    recurringData.pattern.month = parseInt(editYearlyMonth.value) || 1; // Broadcast model stores month as 1-12 (1-based)
-    recurringData.pattern.day = parseInt(editYearlyDay.value) || 1;
-    recurringData.pattern.time = editYearlyTime.value || '08:00';
+    const yearlyDate = editYearlyDate.value;
+    const time = editYearlyTime.value || '08:00';
+    
+    if (yearlyDate) {
+      const selectedDate = new Date(`${yearlyDate}T${time}`);
+      recurringData.pattern.month = selectedDate.getMonth() + 1; // 1-based for backend
+      recurringData.pattern.dayOfMonth = selectedDate.getDate();
+    } else {
+      recurringData.pattern.month = 1;
+      recurringData.pattern.dayOfMonth = 1;
+    }
+    
+    recurringData.pattern.time = time;
   }
   
   return recurringData;
 }
+
+// ==================== POPULATE CURRENT EMPLOYEE ====================
+// Display current employee information in the edit modal
+
+function populateCurrentEmployee(task) {
+  const currentEmployeeNameEl = document.getElementById('editCurrentEmployeeName');
+  const currentEmployeeInfoEl = document.getElementById('editCurrentEmployeeInfo');
+  
+  if (!task.employeeId || !task.employeeName || task.employeeName === 'Chưa giao') {
+    // Task not assigned to any employee yet
+    currentEmployeeNameEl.textContent = 'Chưa giao cho nhân viên';
+    currentEmployeeInfoEl.textContent = 'Task này chưa được giao cho ai';
+    currentEmployeeNameEl.classList.add('text-gray-500');
+  } else {
+    // Task is assigned to an employee
+    currentEmployeeNameEl.textContent = task.employeeName;
+    currentEmployeeNameEl.classList.remove('text-gray-500');
+    
+    // Build info string: Phone • Branch
+    const infoParts = [];
+    if (task.employeePhone) {
+      infoParts.push(`📞 ${task.employeePhone}`);
+    }
+    if (task.employeeBranch) {
+      infoParts.push(`🏪 ${task.employeeBranch}`);
+    }
+    
+    currentEmployeeInfoEl.textContent = infoParts.join(' • ') || 'Thông tin không đầy đủ';
+  }
+}
+
+// ==================== EMPLOYEE SELECTOR FOR EDIT MODAL ====================
+// NEW (20/03/2026): Tabbed interface with Store and Employee tabs
+// Reuses data loading from Assign Modal (loadStores, loadEmployees functions)
+
+let editStoreEmployeesData = []; // Store employees for popup modal
+let editSelectedStoreForEmployees = null; // Currently selected store
+
+async function initializeEmployeeSelector() {
+  // Clear previous state
+  document.getElementById('editNewEmployeeId').value = '';
+  document.getElementById('editStoreSearch').value = '';
+  document.getElementById('editEmployeeSearch').value = '';
+  document.getElementById('editSelectedEmployeeDisplay').classList.add('hidden');
+  
+  // Reuse data from Assign Modal (global arrays: allStores, allEmployees)
+  // If not loaded yet, load using existing functions
+  if (!allStores || allStores.length === 0) {
+    await loadStores(); // Reuse Assign Modal's loadStores function
+  }
+  
+  if (!allEmployees || allEmployees.length === 0) {
+    await loadEmployees(); // Reuse Assign Modal's loadEmployees function
+  }
+  
+  // Render stores list for Edit Modal (default tab)
+  renderEditStoresList(allStores);
+}
+
+// Tab Switching Logic
+document.getElementById('editStoresTab')?.addEventListener('click', () => {
+  const storesTab = document.getElementById('editStoresTab');
+  const employeesTab = document.getElementById('editEmployeesTab');
+  const storesContent = document.getElementById('editStoresContent');
+  const employeesContent = document.getElementById('editEmployeesContent');
+  
+  storesTab.classList.add('active', 'border-purple-600', 'text-purple-600');
+  storesTab.classList.remove('border-transparent', 'text-gray-600');
+  employeesTab.classList.remove('active', 'border-purple-600', 'text-purple-600');
+  employeesTab.classList.add('border-transparent', 'text-gray-600');
+  storesContent.classList.remove('hidden');
+  employeesContent.classList.add('hidden');
+});
+
+document.getElementById('editEmployeesTab')?.addEventListener('click', () => {
+  const storesTab = document.getElementById('editStoresTab');
+  const employeesTab = document.getElementById('editEmployeesTab');
+  const storesContent = document.getElementById('editStoresContent');
+  const employeesContent = document.getElementById('editEmployeesContent');
+  
+  employeesTab.classList.add('active', 'border-purple-600', 'text-purple-600');
+  employeesTab.classList.remove('border-transparent', 'text-gray-600');
+  storesTab.classList.remove('active', 'border-purple-600', 'text-purple-600');
+  storesTab.classList.add('border-transparent', 'text-gray-600');
+  employeesContent.classList.remove('hidden');
+  storesContent.classList.add('hidden');
+  
+  // Render employees list when switching to this tab
+  renderEditEmployeesList(allEmployees);
+});
+
+// Render Stores List (for Chi nhánh tab)
+function renderEditStoresList(stores) {
+  const listContainer = document.getElementById('editStoresList');
+  
+  if (!stores || stores.length === 0) {
+    listContainer.innerHTML = '<p class="text-center text-gray-500 py-4">Không có chi nhánh nào</p>';
+    return;
+  }
+  
+  listContainer.innerHTML = stores.map(store => `
+    <div class="edit-store-item p-3 border border-gray-200 rounded-lg hover:bg-purple-50 hover:border-purple-400 cursor-pointer transition-all"
+         data-store-id="${store._id}"
+         data-store-name="${store.Name}">
+      <div class="flex items-center gap-2">
+        <i class="fas fa-store text-purple-600"></i>
+        <div class="flex-1">
+          <p class="font-semibold text-gray-900 text-sm">${store.Name}</p>
+          <p class="text-xs text-gray-600">${store.Map_Address || 'N/A'}</p>
+        </div>
+        <i class="fas fa-chevron-right text-gray-400"></i>
+      </div>
+    </div>
+  `).join('');
+  
+  // Attach click handlers to open popup
+  document.querySelectorAll('.edit-store-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const storeId = item.getAttribute('data-store-id');
+      const storeName = item.getAttribute('data-store-name');
+      openEditStoreEmployeesModal(storeId, storeName);
+    });
+  });
+}
+
+// Store Search Handler
+document.getElementById('editStoreSearch')?.addEventListener('input', (e) => {
+  const searchTerm = e.target.value.trim().toLowerCase();
+  const filtered = allStores.filter(store => 
+    store.Name.toLowerCase().includes(searchTerm) ||
+    (store.Map_Address && store.Map_Address.toLowerCase().includes(searchTerm))
+  );
+  renderEditStoresList(filtered);
+});
+
+// Render Employees List (for Nhân viên tab - direct selection)
+function renderEditEmployeesList(employees) {
+  const listContainer = document.getElementById('editEmployeeList');
+  
+  if (!employees || employees.length === 0) {
+    listContainer.innerHTML = '<p class="text-center text-gray-500 py-4">Không có nhân viên nào</p>';
+    return;
+  }
+  
+  listContainer.innerHTML = employees.map(emp => `
+    <div class="edit-employee-item p-3 border border-gray-200 rounded-lg hover:bg-purple-50 hover:border-purple-400 cursor-pointer transition-all"
+         data-employee-id="${emp._id}"
+         data-employee-name="${emp.FullName}"
+         data-employee-phone="${emp.Phone}"
+         data-branch-name="${emp.ID_Branch?.Name || 'N/A'}">
+      <div class="flex items-center gap-2">
+        <i class="fas fa-user-circle text-purple-600"></i>
+        <div class="flex-1">
+          <p class="font-semibold text-gray-900 text-sm">${emp.FullName}</p>
+          <p class="text-xs text-gray-600">${emp.Phone} • ${emp.ID_Branch?.Name || 'N/A'}</p>
+        </div>
+      </div>
+    </div>
+  `).join('');
+  
+  // Attach click handlers for direct selection
+  document.querySelectorAll('.edit-employee-item').forEach(item => {
+    item.addEventListener('click', () => {
+      selectEditEmployee(
+        item.getAttribute('data-employee-id'),
+        item.getAttribute('data-employee-name'),
+        item.getAttribute('data-employee-phone'),
+        item.getAttribute('data-branch-name')
+      );
+    });
+  });
+}
+
+// Employee Search Handler (Nhân viên tab)
+document.getElementById('editEmployeeSearch')?.addEventListener('input', (e) => {
+  const searchTerm = e.target.value.trim().toLowerCase();
+  const filtered = allEmployees.filter(emp => 
+    emp.FullName.toLowerCase().includes(searchTerm) ||
+    emp.Phone.includes(searchTerm)
+  );
+  renderEditEmployeesList(filtered);
+});
+
+// Select Employee (Single Select)
+function selectEditEmployee(employeeId, employeeName, employeePhone, branchName) {
+  // Set hidden input
+  document.getElementById('editNewEmployeeId').value = employeeId;
+  
+  // Show selected display
+  document.getElementById('editSelectedEmployeeName').textContent = employeeName;
+  document.getElementById('editSelectedEmployeeInfo').textContent = `${employeePhone} • ${branchName}`;
+  document.getElementById('editSelectedEmployeeDisplay').classList.remove('hidden');
+  
+  // Clear search fields
+  document.getElementById('editStoreSearch').value = '';
+  document.getElementById('editEmployeeSearch').value = '';
+}
+
+// Clear Selected Employee
+document.getElementById('clearEditSelectedEmployee')?.addEventListener('click', () => {
+  document.getElementById('editNewEmployeeId').value = '';
+  document.getElementById('editSelectedEmployeeDisplay').classList.add('hidden');
+  document.getElementById('editStoreSearch').value = '';
+  document.getElementById('editEmployeeSearch').value = '';
+});
+
+// ==================== POPUP MODAL: STORE EMPLOYEES SELECTION ====================
+
+function openEditStoreEmployeesModal(storeId, storeName) {
+  editSelectedStoreForEmployees = { id: storeId, name: storeName };
+  
+  // Set store name in modal header
+  document.getElementById('editStoreEmployeesStoreName').textContent = storeName;
+  
+  // Filter employees by store
+  editStoreEmployeesData = allEmployees.filter(emp => emp.ID_Branch?._id === storeId);
+  
+  // Render employees list
+  renderEditStoreEmployees(editStoreEmployeesData);
+  
+  // Show modal
+  document.getElementById('editStoreEmployeesModal').classList.remove('hidden');
+  
+  // Clear search
+  document.getElementById('editStoreEmployeeSearch').value = '';
+  document.getElementById('editStoreEmployeesSelection').textContent = 'Chưa chọn nhân viên';
+}
+
+function renderEditStoreEmployees(employees) {
+  const listContainer = document.getElementById('editStoreEmployeesList');
+  
+  if (!employees || employees.length === 0) {
+    listContainer.innerHTML = '<p class="text-center text-gray-500 py-4">Không có nhân viên nào trong chi nhánh này</p>';
+    return;
+  }
+  
+  const currentSelectedId = document.getElementById('editNewEmployeeId').value;
+  
+  listContainer.innerHTML = employees.map(emp => {
+    const isSelected = emp._id === currentSelectedId;
+    return `
+      <label class="edit-store-employee-item p-3 border ${isSelected ? 'border-purple-500 bg-purple-50' : 'border-gray-200'} rounded-lg hover:bg-purple-50 hover:border-purple-400 cursor-pointer transition-all flex items-center gap-3">
+        <input type="radio" name="editStoreEmployee" value="${emp._id}" 
+               data-employee-name="${emp.FullName}"
+               data-employee-phone="${emp.Phone}"
+               data-branch-name="${emp.ID_Branch?.Name || 'N/A'}"
+               ${isSelected ? 'checked' : ''}
+               class="w-5 h-5 text-purple-600">
+        <div class="flex items-center gap-2 flex-1">
+          <i class="fas fa-user-circle text-purple-600"></i>
+          <div class="flex-1">
+            <p class="font-semibold text-gray-900 text-sm">${emp.FullName}</p>
+            <p class="text-xs text-gray-600">${emp.Phone} • ${emp.ID_Branch?.Name || 'N/A'}</p>
+          </div>
+        </div>
+      </label>
+    `;
+  }).join('');
+  
+  // Update selection display when radio changes
+  document.querySelectorAll('input[name="editStoreEmployee"]').forEach(radio => {
+    radio.addEventListener('change', () => {
+      if (radio.checked) {
+        const empName = radio.getAttribute('data-employee-name');
+        document.getElementById('editStoreEmployeesSelection').textContent = empName;
+      }
+    });
+  });
+}
+
+// Store Employee Search Handler
+document.getElementById('editStoreEmployeeSearch')?.addEventListener('input', (e) => {
+  const searchTerm = e.target.value.trim().toLowerCase();
+  const filtered = editStoreEmployeesData.filter(emp => 
+    emp.FullName.toLowerCase().includes(searchTerm) ||
+    emp.Phone.includes(searchTerm)
+  );
+  renderEditStoreEmployees(filtered);
+});
+
+// Confirm Store Employee Selection
+document.getElementById('confirmEditStoreEmployeesBtn')?.addEventListener('click', () => {
+  const selectedRadio = document.querySelector('input[name="editStoreEmployee"]:checked');
+  
+  if (!selectedRadio) {
+    alert('Vui lòng chọn một nhân viên');
+    return;
+  }
+  
+  const employeeId = selectedRadio.value;
+  const employeeName = selectedRadio.getAttribute('data-employee-name');
+  const employeePhone = selectedRadio.getAttribute('data-employee-phone');
+  const branchName = selectedRadio.getAttribute('data-branch-name');
+  
+  // Select employee
+  selectEditEmployee(employeeId, employeeName, employeePhone, branchName);
+  
+  // Close popup
+  document.getElementById('editStoreEmployeesModal').classList.add('hidden');
+});
+
+// Cancel Store Employees Selection
+document.getElementById('cancelEditStoreEmployeesBtn')?.addEventListener('click', () => {
+  document.getElementById('editStoreEmployeesModal').classList.add('hidden');
+});
+
+// Close Store Employees Modal
+document.getElementById('closeEditStoreEmployeesModal')?.addEventListener('click', () => {
+  document.getElementById('editStoreEmployeesModal').classList.add('hidden');
+});
 
 // Save edited task details
 saveEditDetailsBtn.addEventListener('click', async () => {
@@ -2186,6 +2611,9 @@ saveEditDetailsBtn.addEventListener('click', async () => {
     // Build recurring data
     const recurringData = buildEditRecurringData(taskType);
     
+    // Get new employee ID if reassigning
+    const newEmployeeId = document.getElementById('editNewEmployeeId').value;
+    
     const requestBody = {
       title,
       description,
@@ -2195,10 +2623,14 @@ saveEditDetailsBtn.addEventListener('click', async () => {
       recurring: recurringData
     };
     
-    // Use broadcastId to update the Broadcast document; fallback to storeTask id
-    const updateId = broadcastId || taskId;
+    // Add employeeId if reassigning
+    if (newEmployeeId) {
+      requestBody.employeeId = newEmployeeId;
+    }
     
-    const response = await fetch(`/api/broadcasts/${updateId}`, {
+    // Use unified admin endpoint for UserTask updates (supports both edit and reassign)
+    // taskId already contains the correct userTaskId from editTaskDetailsId input field
+    const response = await fetch(`/api/admin/user-tasks/${taskId}`, {
       method: 'PUT',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -2214,7 +2646,8 @@ saveEditDetailsBtn.addEventListener('click', async () => {
     
     const result = await response.json();
     
-    successMessage.textContent = 'Đã cập nhật chi tiết công việc thành công!';
+    const actionText = newEmployeeId ? 'cập nhật và giao lại' : 'cập nhật';
+    successMessage.textContent = `Đã ${actionText} công việc thành công!`;
     successModal.classList.remove('hidden');
     editTaskDetailsModal.classList.add('hidden');
     currentEditingTask = null;
@@ -2233,8 +2666,15 @@ saveEditDetailsBtn.addEventListener('click', async () => {
   }
 });
 
-// ==================== EDIT TASK REASSIGN FUNCTIONS ====================
+// ==================== DELETE TASK FUNCTION ====================
 
+/*
+ * DEPRECATED: Edit Task Reassign functions removed (merged into Edit Task Details modal)
+ * Date: 20/03/2026
+ * Reason: Unified edit and reassign into single modal per business logic § 2.8
+ */
+
+/*
 const editTaskReassignModal = document.getElementById('editTaskReassignModal');
 const closeEditReassignModal = document.getElementById('closeEditReassignModal');
 const reassignStoresTab = document.getElementById('reassignStoresTab');
@@ -2579,12 +3019,16 @@ confirmEditReassignBtn.addEventListener('click', async () => {
     confirmEditReassignBtn.innerHTML = 'Xác nhận';
   }
 });
+*/
 
 // ==================== DELETE TASK FUNCTION ====================
 
 async function handleDeleteTask(task) {
+  // Get userTaskId (from dashboard API) or fallback to _id
+  const taskId = task.userTaskId || task._id;
+  
   // Check if task has been assigned to employee
-  if (!task.userTaskId) {
+  if (!taskId) {
     errorMessage.textContent = 'Không thể xóa task chưa được giao cho nhân viên. Vui lòng xóa broadcast gốc.';
     errorModal.classList.remove('hidden');
     return;
@@ -2597,7 +3041,8 @@ async function handleDeleteTask(task) {
   }
   
   try {
-    const response = await fetch(`/api/broadcasts/user-tasks/${task.userTaskId}`, {
+    // IMPROVED (20/03/2026): Use new RESTful endpoint
+    const response = await fetch(`/api/admin/user-tasks/${taskId}`, {
       method: 'DELETE',
       headers: {
         'Authorization': `Bearer ${token}`

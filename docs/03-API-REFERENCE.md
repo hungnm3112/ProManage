@@ -1,8 +1,12 @@
 # API Reference - ProManage
 
-**Last Updated:** March 19, 2026  
-**Version:** 2.0  
+**Last Updated:** March 20, 2026  
+**Version:** 2.1  
 **Purpose:** Complete API documentation với examples, validation rules, và critical warnings
+
+📝 **Recent Updates:**
+- **March 20, 2026:** Admin routes refactoring - moved UserTask admin operations to `/api/admin/user-tasks`
+- **March 20, 2026:** Deprecated `/api/brands/:id/employees` - use `/api/employees?branchId=xxx` instead
 
 ---
 
@@ -1110,7 +1114,12 @@ curl -X GET http://localhost:5000/api/brands/65f1234567890abcdef11111 \
 
 ---
 
-### GET /api/brands/:id/employees
+### ~~GET /api/brands/:id/employees~~ 🚫 DEPRECATED
+
+**⚠️ DEPRECATED (March 20, 2026):** Endpoint này không còn được khuyến nghị sử dụng
+
+**Thay thế bằng:** `GET /api/employees?branchId=xxx`  
+**Lý do:** RESTful hơn - Employee là resource chính, branch chỉ là filter
 
 **Mô tả:** Lấy danh sách employees thuộc brand/store này
 
@@ -1218,6 +1227,15 @@ curl -X GET http://localhost:5000/api/brands/65f1234567890abcdef11111/employees 
   ```
 - **Admin:** No restriction, full access
 
+🔄 **MIGRATION GUIDE:**
+```javascript
+// OLD (deprecated)
+GET /api/brands/65f1234567890abcdef11111/employees
+
+// NEW (recommended)
+GET /api/employees?branchId=65f1234567890abcdef11111
+```
+
 ⚠️ **DATA TYPE WARNING (Rule 6):**
 - Employee fields vẫn có data type issues:
   - `Trang_thai`: String "1"/"0"
@@ -1321,7 +1339,7 @@ Content-Type: application/json
 | `frequency` | string | 'daily' \| 'weekly' \| 'monthly' | Tần suất lặp lại |
 | `interval` | number | 1-12 | Lặp lại mỗi N period |
 | `dayOfWeek` | number | 0-6 | Ngày trong tuần (0=CN, nếu weekly) |
-| `dayOfMonth` | number | 1-31 | Ngày trong tháng (nếu monthly) |
+| `dayOfMonth` | number \| "last" | 1-31 \| "last" | Ngày trong tháng (nếu monthly). Hỗ trợ "last" cho ngày cuối tháng |
 
 **Validation Rules:**
 - `title`: Required, max 200 chars
@@ -1330,7 +1348,7 @@ Content-Type: application/json
 - `assignedStores`: Phải có ít nhất 1 store, stores phải tồn tại
 - `priority`: Phải thuộc ['low', 'medium', 'high', 'urgent']
 - `recurring.frequency`: Nếu có recurring, phải có frequency
-- `recurring.dayOfMonth`: Nếu monthly, phải có dayOfMonth (1-31)
+- `recurring.dayOfMonth`: Nếu monthly, phải có dayOfMonth (1-31 hoặc "last" cho ngày cuối tháng)
 
 **Response 201 (Success):**
 
@@ -1839,7 +1857,12 @@ curl -X POST http://localhost:5000/api/broadcasts/65f9876543210fedcba98765/assig
 
 ---
 
-### PUT /api/broadcasts/user-tasks/:taskId
+### ~~PUT /api/broadcasts/user-tasks/:taskId~~ 🚫 DEPRECATED
+
+**⚠️ DEPRECATED (March 20, 2026):** Endpoint này đã được chuyển sang `/api/admin/user-tasks/:id`
+
+**Thay thế bằng:** `PUT /api/admin/user-tasks/:id`  
+**Lý do:** RESTful hơn, phân quyền rõ ràng, tránh nhầm lẫn với employee operations
 
 **Mô tả:** Reassign UserTask sang employee khác (Admin feature)
 
@@ -1930,9 +1953,16 @@ curl -X PUT http://localhost:5000/api/broadcasts/user-tasks/65fa123456789abcdef0
 - Không tạo UserTask mới - chỉ update existing UserTask
 - Old employee và new employee đều nhận notification
 
+🔄 **MIGRATION:** Use `PUT /api/admin/user-tasks/:id` instead (see section 1️⃣0️⃣ ADMIN)
+
 ---
 
-### DELETE /api/broadcasts/user-tasks/:taskId
+### ~~DELETE /api/broadcasts/user-tasks/:taskId~~ 🚫 DEPRECATED
+
+**⚠️ DEPRECATED (March 20, 2026):** Endpoint này đã được chuyển sang `/api/admin/user-tasks/:id`
+
+**Thay thế bằng:** `DELETE /api/admin/user-tasks/:id`  
+**Lý do:** RESTful hơn, phân quyền rõ ràng, tránh nhầm lẫn với employee operations
 
 **Mô tả:** Xóa UserTask (Admin feature, không xóa được completed tasks)
 
@@ -1995,6 +2025,23 @@ curl -X DELETE http://localhost:5000/api/broadcasts/user-tasks/65fa123456789abcd
 - UserTask document bị xóa hoàn toàn
 - StoreTask completion rate được recalculate
 - Employee nhận notification task bị cancelled
+
+🔄 **MIGRATION:** Use `DELETE /api/admin/user-tasks/:id` instead (see section 1️⃣0️⃣ ADMIN)
+
+**cURL Example:**
+
+```bash
+curl -X DELETE http://localhost:5000/api/broadcasts/user-tasks/65fa123456789abcdef00001 \
+  -H "Authorization: Bearer ADMIN_TOKEN"
+```
+
+**Notes:**
+- ⚠️ Endpoint parameter là `taskId` = **userTaskId** (không phải storeTaskId)
+- UserTask document bị xóa hoàn toàn
+- StoreTask completion rate được recalculate
+- Employee nhận notification task bị cancelled
+
+🔄 **MIGRATION:** Use `DELETE /api/admin/user-tasks/:id` instead (see section 1️⃣0️⃣ ADMIN)
 
 ---
 
@@ -4461,6 +4508,260 @@ curl -X POST http://localhost:5000/api/upload/document \
 - Chỉ accept PDF (application/pdf MIME type)
 - Dùng cho broadcast attachments (hướng dẫn, checklist)
 - Optional: Extract text hoặc metadata từ PDF
+
+---
+
+## 1️⃣0️⃣ ADMIN
+
+**Base Path:** `/api/admin`  
+**Purpose:** Admin-only operations cho quản lý UserTasks và system administration
+
+📝 **REFACTORING (March 20, 2026):**
+- Di chuyển UserTask admin operations từ `/api/broadcasts/user-tasks` sang `/api/admin/user-tasks`
+- Lý do: RESTful standards, rõ ràng về phân quyền, tránh nhầm lẫn ID
+- Old routes: DEPRECATED (vẫn hoạt động cho backward compatibility)
+- New routes: RECOMMENDED (implement khi ready)
+
+---
+
+### PUT /api/admin/user-tasks/:id
+
+**Mô tả:** Reassign UserTask sang employee khác (Admin feature)
+
+**Access:** 🔒 Admin only  
+**Business Logic:** [01-BUSINESS-LOGIC.md § 2.8 Reassign UserTask](01-BUSINESS-LOGIC.md#28-reassign-usertask)
+
+✅ **REFACTORED March 20, 2026:** New RESTful endpoint  
+⚠️ **Replaces:** `PUT /api/broadcasts/user-tasks/:taskId` (deprecated)
+
+**Benefits of new route:**
+- ✅ RESTful standard compliance
+- ✅ Clear admin-only permissions
+- ✅ Separate từ employee APIs (/api/my-tasks)
+- ✅ Reduces ID confusion risk (userTaskId vs storeTaskId)
+
+**Request:**
+
+```http
+PUT /api/admin/user-tasks/65fa123456789abcdef00001 HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer {ADMIN_TOKEN}
+Content-Type: application/json
+
+{
+  "employeeId": "65f1234567890abcdef12349"
+}
+```
+
+**Path Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | ObjectId | ✅ Yes | UserTask ObjectId (not storeTaskId) |
+
+**Request Body:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `employeeId` | string | ✅ Yes | ObjectId của employee mới |
+
+**Validation:**
+- UserTask phải tồn tại
+- UserTask chưa completed
+- Employee mới phải active (Trang_thai = "1")
+- Employee mới không được có task này rồi
+- Request user phải có role = 'admin'
+
+**Process:**
+1. **Authorization:** Verify `req.user.role === 'admin'` (middleware `authorizeAdmin`)
+2. Find UserTask by id
+3. Update UserTask.employeeId → new employee
+4. Nếu employee mới thuộc store khác:
+   - Find/Create StoreTask cho store mới
+   - Update UserTask.storeTaskId
+   - Remove từ old StoreTask.assignedEmployees
+   - Add vào new StoreTask.assignedEmployees
+5. Create notification cho employee mới
+6. Create notification cho old employee (task removed)
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "message": "Reassign thành công",
+  "data": {
+    "userTask": {
+      "_id": "65fa123456789abcdef00001",
+      "employeeId": "65f1234567890abcdef12349",
+      "oldEmployeeId": "65f1234567890abcdef12346",
+      "storeTaskId": "65f9876543210fedcba98766",
+      "status": "pending",
+      "updatedAt": "2026-03-20T10:30:00.000Z"
+    }
+  }
+}
+```
+
+**Response 400 (Task đã completed):**
+
+```json
+{
+  "success": false,
+  "message": "Không thể reassign task đã hoàn thành"
+}
+```
+
+**Response 403 (Not Admin):**
+
+```json
+{
+  "success": false,
+  "message": "Chỉ admin mới có quyền reassign task"
+}
+```
+
+**Response 404 (UserTask Not Found):**
+
+```json
+{
+  "success": false,
+  "message": "Không tìm thấy UserTask"
+}
+```
+
+**Implementation:**
+- File: `src/controllers/adminController.js` (NEW)
+- Function: `reassignUserTask()`
+- Route: `src/routes/adminRoutes.js` (NEW)
+- Middleware: `authorizeAdmin` from `src/middleware/authMiddleware.js`
+
+**cURL Example:**
+
+```bash
+curl -X PUT http://localhost:5000/api/admin/user-tasks/65fa123456789abcdef00001 \
+  -H "Authorization: Bearer ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"employeeId": "65f1234567890abcdef12349"}'
+```
+
+**Notes:**
+- ⚠️ Parameter `id` = **userTaskId** (không phải storeTaskId) - See Rule 2
+- Có thể reassign cross-store (tự động xử lý StoreTask changes)
+- Không tạo UserTask mới - chỉ update existing UserTask
+- Old employee và new employee đều nhận notification
+- Admin-only: Employee/Manager cannot access this endpoint
+
+**Bug History:**
+- **Bug #2, #3 (FIXED 18/03/2026):** Trước đây dùng nhầm storeTaskId → 404 errors
+- **IMPROVED (20/03/2026):** Moved to RESTful /api/admin route
+
+---
+
+### DELETE /api/admin/user-tasks/:id
+
+**Mô tả:** Xóa UserTask (Admin feature, không xóa được completed tasks)
+
+**Access:** 🔒 Admin only  
+**Business Logic:** [01-BUSINESS-LOGIC.md § 2.9 Delete UserTask](01-BUSINESS-LOGIC.md#29-delete-usertask)
+
+✅ **REFACTORED March 20, 2026:** New RESTful endpoint  
+⚠️ **Replaces:** `DELETE /api/broadcasts/user-tasks/:taskId` (deprecated)
+
+**Benefits of new route:**
+- ✅ RESTful standard compliance
+- ✅ Clear admin-only permissions
+- ✅ Separate từ employee APIs
+- ✅ Consistent với PUT /api/admin/user-tasks/:id
+
+**Request:**
+
+```http
+DELETE /api/admin/user-tasks/65fa123456789abcdef00001 HTTP/1.1
+Host: localhost:5000
+Authorization: Bearer {ADMIN_TOKEN}
+```
+
+**Path Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | ObjectId | ✅ Yes | UserTask ObjectId (not storeTaskId) |
+
+**Validation:**
+- UserTask phải tồn tại
+- UserTask chưa completed (status !== 'completed')
+- Request user phải có role = 'admin'
+
+**Process:**
+1. **Authorization:** Verify `req.user.role === 'admin'` (middleware `authorizeAdmin`)
+2. Find UserTask by id
+3. Verify status !== 'completed'
+4. Delete UserTask document
+5. Remove từ StoreTask.assignedEmployees array
+6. Update StoreTask completion rate
+7. Create notification cho employee (task cancelled)
+
+**Response 200 (Success):**
+
+```json
+{
+  "success": true,
+  "message": "UserTask đã được xóa"
+}
+```
+
+**Response 400 (Task đã completed):**
+
+```json
+{
+  "success": false,
+  "message": "Không thể xóa task đã hoàn thành"
+}
+```
+
+**Response 403 (Not Admin):**
+
+```json
+{
+  "success": false,
+  "message": "Chỉ admin mới có quyền xóa task"
+}
+```
+
+**Response 404 (UserTask Not Found):**
+
+```json
+{
+  "success": false,
+  "message": "Không tìm thấy UserTask"
+}
+```
+
+**Implementation:**
+- File: `src/controllers/adminController.js` (NEW)
+- Function: `deleteUserTask()`
+- Route: `src/routes/adminRoutes.js` (NEW)
+- Middleware: `authorizeAdmin`
+
+**cURL Example:**
+
+```bash
+curl -X DELETE http://localhost:5000/api/admin/user-tasks/65fa123456789abcdef00001 \
+  -H "Authorization: Bearer ADMIN_TOKEN"
+```
+
+**Notes:**
+- ⚠️ Parameter `id` = **userTaskId** (không phải storeTaskId) - See Rule 2
+- UserTask document bị xóa hoàn toàn (hard delete)
+- StoreTask completion rate được recalculate
+- Employee nhận notification task bị cancelled
+- **KHÔNG thể xóa completed tasks** (business rule)
+- Admin-only: Không thể undo sau khi xóa
+
+**Bug History:**
+- **Bug #2, #3 (FIXED 18/03/2026):** Trước đây dùng nhầm storeTaskId → 404 errors
+- **IMPROVED (20/03/2026):** Moved to RESTful /api/admin route
 
 ---
 

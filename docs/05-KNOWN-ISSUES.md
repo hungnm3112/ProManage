@@ -1,7 +1,7 @@
 # 05 - AUDIT CÁC VẤN ĐỀ ĐÃ BIẾT
 
 **Ngày audit:** 19/03/2026  
-**Cập nhật cuối:** 20/03/2026 (Added Implementation Queue)  
+**Cập nhật cuối:** 20/03/2026 (Fixed Monthly Recurring Dropdown UI)  
 **Mục đích:** Ghi chép bugs, workarounds, technical debt + Ready-to-code tasks  
 **Phạm vi:** Toàn bộ codebase
 
@@ -11,20 +11,20 @@
 
 ## 📊 TỔNG QUAN
 
-**Tổng số vấn đề:** 14
-- ✅ Đã sửa: 4
+**Tổng số vấn đề:** 15
+- ✅ Đã sửa: 5
 - 🚀 Implementation Queue: 5 (Ready to code)
-- ⚠️ Known Issues: 6
+- ⚠️ Known Issues: 5
 - 🔧 Technical Debt: 4
 
 **Mức độ ưu tiên:**
 - 🔴 CRITICAL: 1 (DevTools - chỉ critical nếu production)
 - 🟡 HIGH: 2
 - 🟢 MEDIUM: 8
-- ⚪ LOW: 3
+- ⚪ LOW: 4
 
 **Implementation Queue Priority:**
-- 🔴 P0 - API Refactoring: 3 tasks (REFACTOR-001, 002, 003)
+- 🔴 P0 - API Refactoring: 3 tasks (REFACTOR-001, 002, 003) ✅ COMPLETED
 - 🔴 P1 - Security: 1 task (SECURITY-001)
 - 🟡 P2 - Performance: 1 task (PERF-001)
 
@@ -62,7 +62,42 @@ ref: 'Employee'
 
 ---
 
-### 2. Dashboard dùng sai UserTask ID ✅
+### 2. Monthly Recurring Dropdown chỉ có 10 ngày ✅
+
+**Ngày phát hiện:** 20/03/2026  
+**Ngày sửa:** 20/03/2026  
+**Mức độ:** 🟡 HIGH  
+
+**Mô tả vấn đề:**
+- File: `src/views/pages/admin/dashboard.ejs` (lines 287-297, 718-729)
+- Dropdown `#monthlyDay` chỉ có 10 options: 1,2,3,5,10,15,20,25,28,"last"
+- Không thể chọn ngày 4,6-9,11-14,16-19,21-24,26-27,29-31
+- Backend Broadcast model đã hỗ trợ 1-31 và "last", nhưng UI giới hạn
+
+**Tác động:**
+- Không thể tạo broadcast lặp lại cho các ngày như: 21 (ngày chốt lương), 27 (ngày trả lương), 30 (ngày đóng tiền thuê)
+- Giảm tính linh hoạt của hệ thống
+- UX rất kém cho admin
+
+**Solution:**
+- Thay thế `<select>` dropdown bằng `<input type="number" min="1" max="31">`
+- Thêm checkbox "Ngày cuối tháng" để hỗ trợ "last"
+- Khi checkbox checked, disable number input
+- Cập nhật JavaScript xử lý logic tương ứng
+
+**Files đã sửa:**
+- `src/views/pages/admin/dashboard.ejs` - Thay dropdown bằng number input + checkbox (2 locations)
+- `public/js/admin-dashboard.js` - Cập nhật logic xử lý checkbox và number input
+
+**Kết quả:**
+- ✅ UI giờ hỗ trợ đầy đủ 31 ngày + ngày cuối tháng
+- ✅ Native HTML5 input validation (min/max)
+- ✅ UX tốt hơn cho admin
+- ✅ Không cần thay đổi backend code
+
+---
+
+### 3. Dashboard dùng sai UserTask ID ✅
 
 **Ngày phát hiện:** 18/03/2026  
 **Ngày sửa:** 18/03/2026  

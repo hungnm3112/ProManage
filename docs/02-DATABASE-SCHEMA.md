@@ -297,7 +297,7 @@
     pattern: {
       time: String (HH:mm format)
       dayOfWeek: Number (0-6 for weekly)
-      dayOfMonth: Number|"last" (1-31 or "last" for monthly)
+      dayOfMonth: Number|"last" (1-31 or "last" for monthly - hỗ trợ ngày cuối tháng)
       month: Number (1-12 for yearly)
     }
   }

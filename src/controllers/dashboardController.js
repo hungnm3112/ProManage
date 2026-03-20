@@ -274,7 +274,14 @@ const getAdminTasksByStatus = async (req, res) => {
     const tasksWithUserTasks = await Promise.all(tasks.map(async (task) => {
       // Find first UserTask for this StoreTask
       const userTask = await UserTask.findOne({ storeTaskId: task._id })
-        .populate('employeeId', 'FullName')
+        .populate({
+          path: 'employeeId',
+          select: 'FullName Phone ID_Branch',
+          populate: {
+            path: 'ID_Branch',
+            select: 'Name'
+          }
+        })
         .select('_id employeeId');
       
       return {
@@ -290,6 +297,19 @@ const getAdminTasksByStatus = async (req, res) => {
       const manager = task.managerId || {};
       const employee = userTask?.employeeId || (task.assignedEmployees && task.assignedEmployees[0]);
       
+      // Debug: Log employee info
+      if (userTask) {
+        console.log('[Dashboard API] Task employee info:', {
+          taskId: task._id,
+          userTaskId: userTask._id,
+          hasEmployee: !!employee,
+          employeeId: employee?._id,
+          employeeName: employee?.FullName,
+          employeePhone: employee?.Phone,
+          employeeBranch: employee?.ID_Branch?.Name
+        });
+      }
+      
       return {
         _id: task._id,
         userTaskId: userTask?._id,
@@ -298,7 +318,10 @@ const getAdminTasksByStatus = async (req, res) => {
         storeName: store.Name || 'N/A',
         storeAddress: store.Map_Address || '',
         managerName: manager.FullName || 'N/A',
+        employeeId: employee?._id,
         employeeName: employee?.FullName || 'Chưa giao',
+        employeePhone: employee?.Phone || null,
+        employeeBranch: employee?.ID_Branch?.Name || null,
         deadline: broadcast.deadline,
         status: task.status,
         priority: broadcast.priority || 'medium',

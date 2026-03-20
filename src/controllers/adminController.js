@@ -22,31 +22,51 @@ const notificationService = require('../services/notificationService');
 
 /**
  * @route   PUT /api/admin/user-tasks/:id
- * @desc    Reassign UserTask to different employee (Admin only)
+ * @desc    Update UserTask (edit broadcast fields) and/or reassign to different employee (Admin only)
  * @access  Admin only
  * 
  * Business Logic: 01-BUSINESS-LOGIC.md § 2.8
  * 
+ * SUPPORTS:
+ * - Edit broadcast fields (title, description, priority, deadline, checklist, recurring)
+ * - Reassign to different employee (optional)
+ * - Both edit + reassign in one request
+ * 
  * Process:
  * 1. Authorization: Verify req.user.role === 'admin' (middleware)
  * 2. Find UserTask by id (not storeTaskId - see Rule 2)
- * 3. Update UserTask.employeeId → new employee
- * 4. If cross-store reassign:
- *    - Find/Create StoreTask for new store
- *    - Update UserTask.storeTaskId
- *    - Remove from old StoreTask.assignedEmployees
- *    - Add to new StoreTask.assignedEmployees
- * 5. Create notification for new employee
- * 6. Create notification for old employee (task removed)
+ * 3. If broadcast fields provided → Update Broadcast document
+ * 4. If broadcast checklist changed → Update UserTask.checklist (reset isCompleted)
+ * 5. If employeeId provided AND different → Reassign to new employee
+ *    - Update UserTask.employeeId → new employee
+ *    - If cross-store reassign:
+ *      - Find/Create StoreTask for new store
+ *      - Update UserTask.storeTaskId
+ *      - Remove from old StoreTask.assignedEmployees
+ *      - Add to new StoreTask.assignedEmployees
+ *    - Create notifications for both employees
+ * 6. Save and return updated UserTask
  */
 const reassignUserTask = async (req, res) => {
   try {
-    const { id } = req.params; // userTaskId (NOT storeTaskId)
-    const { employeeId: newEmployeeId } = req.body;
+    const { id } = req.params;
+    const { 
+      employeeId: newEmployeeId,
+      title,
+      description,
+      priority,
+      deadline,
+      checklist,
+      recurring
+    } = req.body;
     
-    console.log(`[Admin/reassignUserTask] Reassigning UserTask ${id} to employee ${newEmployeeId}`);
+    console.log(`[Admin/updateUserTask] Updating UserTask ${id}:`, { 
+      hasEmployeeId: !!newEmployeeId, 
+      hasTitle: !!title,
+      hasChecklist: !!checklist,
+      hasDeadline: !!deadline
+    });
     
-    // Find the UserTask by id
     const userTask = await UserTask.findById(id)
       .populate('broadcastId')
       .populate('employeeId')
@@ -56,157 +76,182 @@ const reassignUserTask = async (req, res) => {
       return sendError(res, 'Không tìm thấy UserTask', 404);
     }
     
-    // Check if task is already completed
     if (userTask.status === 'completed' || userTask.status === 'approved') {
-      return sendError(res, 'Không thể reassign task đã hoàn thành', 400);
+      return sendError(res, 'Không thể cập nhật task đã hoàn thành', 400);
     }
     
-    // Find new employee
-    const newEmployee = await Employee.findById(newEmployeeId)
-      .populate('ID_Branch');
+    let updatedBroadcast = false;
+    let reassigned = false;
     
-    if (!newEmployee) {
-      return sendError(res, 'Không tìm thấy employee mới', 404);
-    }
-    
-    // Validate new employee is active (Rule 6: String "1" not boolean)
-    if (newEmployee.Trang_thai !== "1" && newEmployee.Status !== 'Đang hoạt động') {
-      return sendError(res, 'Employee mới không active', 400);
-    }
-    
-    // Check if new employee already has this task (prevent duplicates)
-    const existingTask = await UserTask.findOne({
-      broadcastId: userTask.broadcastId._id,
-      employeeId: newEmployeeId
-    });
-    
-    if (existingTask && existingTask._id.toString() !== id) {
-      return sendError(res, `Nhân viên ${newEmployee.Ho_va_ten} đã có task này rồi`, 400);
-    }
-    
-    // Save old employee reference BEFORE updating (Bug #3 fix)
-    const oldEmployee = userTask.employeeId;
-    const oldStoreTask = userTask.storeTaskId;
-    
-    // Update UserTask.employeeId
-    userTask.employeeId = newEmployeeId;
-    
-    // Check if cross-store reassign (different branches)
-    const oldBranchId = oldEmployee.ID_Branch?._id || oldEmployee.ID_Branch;
-    const newBranchId = newEmployee.ID_Branch?._id || newEmployee.ID_Branch;
-    
-    if (oldBranchId.toString() !== newBranchId.toString()) {
-      console.log('[Admin/reassignUserTask] Cross-store reassign detected');
+    // PART 1: UPDATE BROADCAST FIELDS
+    if (title || description || priority || deadline || checklist || recurring) {
+      const Broadcast = require('../models/Broadcast');
+      const broadcast = await Broadcast.findById(userTask.broadcastId._id);
       
-      // Find or create StoreTask for new branch
-      let newStoreTask = await StoreTask.findOne({
+      if (!broadcast) {
+        return sendError(res, 'Không tìm thấy Broadcast', 404);
+      }
+      
+      if (title) broadcast.title = title;
+      if (description) broadcast.description = description;
+      if (priority) broadcast.priority = priority;
+      if (deadline) broadcast.deadline = new Date(deadline);
+      if (checklist && Array.isArray(checklist)) broadcast.checklist = checklist;
+      if (recurring) broadcast.recurring = recurring;
+      
+      await broadcast.save();
+      console.log('[Admin/updateUserTask] Broadcast updated:', broadcast._id);
+      updatedBroadcast = true;
+      
+      if (checklist && Array.isArray(checklist)) {
+        userTask.checklist = checklist.map(item => ({
+          task: typeof item === 'string' ? item : item.task,
+          required: typeof item === 'object' ? item.required : true,
+          isCompleted: false,
+          completedAt: null
+        }));
+        console.log('[Admin/updateUserTask] UserTask checklist updated');
+      }
+    }
+    
+    // PART 2: REASSIGN TO NEW EMPLOYEE (OPTIONAL)
+    if (newEmployeeId && newEmployeeId !== userTask.employeeId._id.toString()) {
+      console.log(`[Admin/updateUserTask] Reassigning to employee ${newEmployeeId}`);
+      
+      const newEmployee = await Employee.findById(newEmployeeId).populate('ID_Branch');
+      
+      if (!newEmployee) {
+        return sendError(res, 'Không tìm thấy employee mới', 404);
+      }
+      
+      if (newEmployee.Trang_thai !== "1" && newEmployee.Status !== 'Đang hoạt động') {
+        return sendError(res, 'Employee mới không active', 400);
+      }
+      
+      const existingTask = await UserTask.findOne({
         broadcastId: userTask.broadcastId._id,
-        storeId: newBranchId
+        employeeId: newEmployeeId
       });
       
-      if (!newStoreTask) {
-        console.log('[Admin/reassignUserTask] Creating new StoreTask for branch', newBranchId);
+      if (existingTask && existingTask._id.toString() !== id) {
+        return sendError(res, `Nhân viên ${newEmployee.Ho_va_ten || newEmployee.FullName} đã có task này rồi`, 400);
+      }
+      
+      const oldEmployee = userTask.employeeId;
+      const oldStoreTask = userTask.storeTaskId;
+      
+      userTask.employeeId = newEmployeeId;
+      
+      const oldBranchId = oldEmployee.ID_Branch?._id || oldEmployee.ID_Branch;
+      const newBranchId = newEmployee.ID_Branch?._id || newEmployee.ID_Branch;
+      
+      if (oldBranchId.toString() !== newBranchId.toString()) {
+        console.log('[Admin/updateUserTask] Cross-store reassign detected');
         
-        // Find manager for new branch
-        const managers = await Employee.find({
-          ID_Branch: newBranchId,
-          $or: [
-            { Status: 'Đang hoạt động' },
-            { Trang_thai: "1" }
-          ]
-        }).populate('ID_nhom');
+        let newStoreTask = await StoreTask.findOne({
+          broadcastId: userTask.broadcastId._id,
+          storeId: newBranchId
+        });
         
-        let manager = null;
-        for (const emp of managers) {
-          const role = await getEmployeeRole(emp);
-          if (role === 'manager') {
-            manager = emp;
-            break;
+        if (!newStoreTask) {
+          const managers = await Employee.find({
+            ID_Branch: newBranchId,
+            $or: [
+              { Status: 'Đang hoạt động' },
+              { Trang_thai: "1" }
+            ]
+          }).populate('ID_nhom');
+          
+          let manager = null;
+          for (const emp of managers) {
+            const role = await getEmployeeRole(emp);
+            if (role === 'manager') {
+              manager = emp;
+              break;
+            }
+          }
+          
+          if (!manager) manager = newEmployee;
+          
+          newStoreTask = new StoreTask({
+            broadcastId: userTask.broadcastId._id,
+            storeId: newBranchId,
+            managerId: manager._id,
+            status: 'pending',
+            assignedEmployees: [newEmployeeId]
+          });
+          
+          await newStoreTask.save();
+        } else {
+          if (!newStoreTask.assignedEmployees.includes(newEmployeeId)) {
+            newStoreTask.assignedEmployees.push(newEmployeeId);
+            await newStoreTask.save();
           }
         }
         
-        if (!manager) manager = newEmployee; // Fallback to new employee
+        userTask.storeTaskId = newStoreTask._id;
         
-        // Create new StoreTask
-        newStoreTask = new StoreTask({
+        if (oldStoreTask) {
+          const oldStoreTaskDoc = await StoreTask.findById(oldStoreTask._id);
+          if (oldStoreTaskDoc) {
+            oldStoreTaskDoc.assignedEmployees = oldStoreTaskDoc.assignedEmployees.filter(
+              empId => empId.toString() !== oldEmployee._id.toString()
+            );
+            await oldStoreTaskDoc.save();
+          }
+        }
+      }
+      
+      await notificationService.createNotification({
+        userId: newEmployeeId,
+        type: 'task_assigned',
+        title: 'Task mới được giao',
+        message: `Bạn được giao task: ${userTask.broadcastId.title}`,
+        data: {
+          userTaskId: userTask._id,
           broadcastId: userTask.broadcastId._id,
-          storeId: newBranchId,
-          managerId: manager._id,
-          status: 'pending',
-          assignedEmployees: [newEmployeeId]
-        });
-        
-        await newStoreTask.save();
-        console.log('[Admin/reassignUserTask] Created StoreTask:', newStoreTask._id);
-      } else {
-        // Add employee to existing StoreTask if not already there
-        if (!newStoreTask.assignedEmployees.includes(newEmployeeId)) {
-          newStoreTask.assignedEmployees.push(newEmployeeId);
-          await newStoreTask.save();
-          console.log('[Admin/reassignUserTask] Added employee to existing StoreTask');
+          employeeId: newEmployeeId
         }
-      }
+      });
       
-      // Update UserTask.storeTaskId
-      userTask.storeTaskId = newStoreTask._id;
-      
-      // Remove from old StoreTask.assignedEmployees
-      if (oldStoreTask) {
-        const oldStoreTaskDoc = await StoreTask.findById(oldStoreTask._id);
-        if (oldStoreTaskDoc) {
-          oldStoreTaskDoc.assignedEmployees = oldStoreTaskDoc.assignedEmployees.filter(
-            empId => empId.toString() !== oldEmployee._id.toString()
-          );
-          await oldStoreTaskDoc.save();
-          console.log('[Admin/reassignUserTask] Removed from old StoreTask');
+      await notificationService.createNotification({
+        userId: oldEmployee._id,
+        type: 'task_reassigned',
+        title: 'Task đã được chuyển',
+        message: `Task "${userTask.broadcastId.title}" đã được chuyển cho nhân viên khác`,
+        data: {
+          userTaskId: userTask._id,
+          broadcastId: userTask.broadcastId._id,
+          oldEmployeeId: oldEmployee._id,
+          newEmployeeId: newEmployeeId
         }
-      }
+      });
+      
+      reassigned = true;
     }
     
-    // Save updated UserTask
     await userTask.save();
     
-    // Create notification for new employee
-    await notificationService.createNotification({
-      userId: newEmployeeId,
-      type: 'task_assigned',
-      title: 'Task mới được giao',
-      message: `Bạn được giao task: ${userTask.broadcastId.title}`,
-      data: {
-        userTaskId: userTask._id,
-        broadcastId: userTask.broadcastId._id,
-        employeeId: newEmployeeId
-      }
-    });
+    let actionText = 'cập nhật';
+    if (updatedBroadcast && reassigned) {
+      actionText = 'cập nhật và giao lại';
+    } else if (reassigned) {
+      actionText = 'giao lại';
+    }
     
-    // Create notification for old employee (task removed)
-    await notificationService.createNotification({
-      userId: oldEmployee._id,
-      type: 'task_reassigned',
-      title: 'Task đã được chuyển',
-      message: `Task "${userTask.broadcastId.title}" đã được chuyển cho nhân viên khác`,
-      data: {
-        userTaskId: userTask._id,
-        broadcastId: userTask.broadcastId._id,
-        oldEmployeeId: oldEmployee._id,
-        newEmployeeId: newEmployeeId
-      }
-    });
-    
-    console.log('[Admin/reassignUserTask] Reassign successful');
-    
-    return sendSuccess(res, 'Reassign thành công', {
+    return sendSuccess(res, `Đã ${actionText} công việc thành công`, {
       userTask: {
         _id: userTask._id,
-        employeeId: newEmployeeId,
-        oldEmployeeId: oldEmployee._id,
+        employeeId: userTask.employeeId,
         storeTaskId: userTask.storeTaskId,
-        status: userTask.status
+        status: userTask.status,
+        updatedBroadcast,
+        reassigned
       }
     });
     
   } catch (error) {
-    console.error('[Admin/reassignUserTask] Error:', error);
+    console.error('[Admin/updateUserTask] Error:', error);
     return sendError(res, error.message, 500);
   }
 };
