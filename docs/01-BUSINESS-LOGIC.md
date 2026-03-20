@@ -41,7 +41,12 @@
 
 **Kiểm tra đầu vào:**
 - `phone` bắt buộc
-- `password` bắt buộc
+- `password` bắt buộc (không giới hạn độ dài tối thiểu)
+
+**⚠️ THAY ĐỔI (20/03/2026):**
+- **Trước:** Password yêu cầu tối thiểu 6 ký tự (HTML5 validation)
+- **Sau:** Bỏ giới hạn tối thiểu - cho phép mật khẩu từ 1 ký tự trở lên
+- **Lý do:** Linh hoạt hơn cho hệ thống test/dev và mật khẩu đơn giản
 
 **Quy trình xử lý:**
 1. Tìm Employee theo Phone (bao gồm Password + Salt)
@@ -302,67 +307,358 @@
 
 ### 2.8 Cập nhật UserTask (Chuyển giao) ⭐
 
-**Endpoint:** `PUT /api/broadcasts/user-tasks/:taskId`  
+**Endpoint:** `PUT /api/admin/user-tasks/:id`  
 **Quyền:** Riêng tư (chỉ admin)
 
-**Mục đích:** Admin có thể edit UserTask và chuyển giao cho nhân viên khác
+**⚠️ REFACTOR (20/03/2026):**
+- **Cũ:** `PUT /api/broadcasts/user-tasks/:taskId` ❌ (không RESTful)
+- **Mới:** `PUT /api/admin/user-tasks/:id` ✅ (chuẩn REST, rõ quyền)
 
-**Dữ liệu đầu vào:**
-- employeeId (để chuyển giao)
-- title, description, priority, deadline (để edit broadcast)
-- checklist (để cập nhật task checklist)
+**Mục đích:** Admin có thể edit thông tin công việc VÀ/HOẶC chuyển giao cho nhân viên khác
 
-**Quy trình:**
-1. Tìm UserTask theo taskId
-2. Kiểm tra task đã hoàn thành chưa → Không edit được task đã hoàn thành
-3. **Nếu chuyển giao (employeeId thay đổi):**
-   a. Tìm nhân viên mới, kiểm tra:
-      - Employee tồn tại
-      - Employee đang hoạt động
-      - Employee chưa có task này
-   b. **Lưu tham chiếu nhân viên cũ** (quan trọng!)
-   c. Cập nhật userTask.employeeId thành nhân viên mới
-   d. **Nếu nhân viên mới ở branch khác:**
-      - Tìm/tạo StoreTask cho branch mới
-      - Xóa nhân viên cũ khỏi StoreTask cũ.assignedEmployees
-      - Thêm nhân viên mới vào StoreTask mới.assignedEmployees
-      - Cập nhật userTask.storeTaskId thành StoreTask mới
-4. **Nếu edit các trường broadcast:**
-   - Cập nhật document Broadcast (title, description, priority, deadline, checklist)
-   - Cập nhật UserTask.checklist khớp với broadcast checklist mới
-5. Lưu thay đổi
+**Dữ liệu đầu vào (Request Body):**
+- `employeeId` (optional) - ID nhân viên mới để chuyển giao
+- `title` (optional) - Tiêu đề công việc mới
+- `description` (optional) - Mô tả công việc mới
+- `priority` (optional) - Mức độ ưu tiên (low/medium/high/urgent)
+- `deadline` (optional) - Thời hạn hoàn thành mới
+- `checklist` (optional) - Danh sách checklist items mới
+- `recurring` (optional) - Cấu hình lặp lại công việc
+
+**3 trường hợp sử dụng:**
+1. **Edit only (không giao lại):** Gửi các trường broadcast (title, description, ...), KHÔNG gửi employeeId → Backend chỉ cập nhật Broadcast, giữ nguyên nhân viên
+2. **Reassign only (không edit):** Chỉ gửi employeeId → Backend chỉ thực hiện giao lại, không thay đổi thông tin công việc
+3. **Edit + Reassign:** Gửi cả broadcast fields VÀ employeeId → Backend cập nhật cả hai
+
+**🎨 GIAO DIỆN EDIT (Modal Unified):**
+
+**Cấu trúc modal:**
+```
+┌─────────────────────────────────────────┐
+│  Sửa Chi tiết Công việc                 │
+├─────────────────────────────────────────┤
+│  📝 Thông tin cơ bản                    │
+│     - Tiêu đề *                         │
+│     - Mô tả *                           │
+│     - Mức độ ưu tiên *                  │
+├─────────────────────────────────────────┤
+│  ✅ Checklist                            │
+│     - Danh sách công việc               │
+│     - Nút thêm item                     │
+├─────────────────────────────────────────┤
+│  ⏰ Thời hạn hoàn thành *                │
+│     - Tabs: One-time / Daily / ...     │
+│     - Date/Time pickers                 │
+│     - Preview deadline tiếp theo        │
+├─────────────────────────────────────────┤
+│  👤 Giao lại cho nhân viên (Tùy chọn)   │
+│                                         │
+│     📌 Đang giao cho:                   │
+│     ┌─────────────────────────────┐    │
+│     │ 👤 Nguyễn Văn A             │    │
+│     │ 📞 0901234567 • CN Quận 1   │    │
+│     └─────────────────────────────┘    │
+│                                         │
+│     ━━━ Chọn nhân viên mới ━━━         │
+│     ┌─────────┬──────────┐             │
+│     │Chi nhánh│Nhân viên │  ← Tabs    │
+│     └─────────┴──────────┘             │
+│                                         │
+│     [Tab Chi nhánh:]                    │
+│       🔍 Tìm kiếm chi nhánh...          │
+│       ┌─────────────────────────┐      │
+│       │ 🏪 CN Quận 1            │      │
+│       │ 📍 123 Nguyễn Huệ      │      │
+│       ├─────────────────────────┤      │
+│       │ 🏪 CN Quận 3            │      │
+│       └─────────────────────────┘      │
+│                                         │
+│     [Tab Nhân viên:]                    │
+│       🔍 Tìm kiếm nhân viên...          │
+│       ┌─────────────────────────┐      │
+│       │ 👤 Nguyễn Văn A         │      │
+│       │ 📞 0901234567 • CN Q1   │      │
+│       ├─────────────────────────┤      │
+│       │ 👤 Trần Thị B           │      │
+│       └─────────────────────────┘      │
+│                                         │
+│     [Nhân viên đã chọn:]                │
+│       ┌─────────────────────────┐      │
+│       │ ✅ Nguyễn Văn A         │      │
+│       │    0901234567 • CN Q1    [×]   │
+│       └─────────────────────────┘      │
+├─────────────────────────────────────────┤
+│           [Hủy]  [Lưu thay đổi]        │
+└─────────────────────────────────────────┘
+```
+
+**Modal phụ khi chọn Chi nhánh:**
+```
+┌─────────────────────────────────────────┐
+│  Chọn nhân viên - CN Quận 1             │
+├─────────────────────────────────────────┤
+│  🔍 Tìm kiếm nhân viên...               │
+│  ┌─────────────────────────────────┐   │
+│  │ ☐ Nguyễn Văn A                  │   │
+│  │   📞 0901... • Nhân viên        │   │
+│  ├─────────────────────────────────┤   │
+│  │ ☐ Trần Văn B                    │   │
+│  │   📞 0902... • Nhân viên        │   │
+│  └─────────────────────────────────┘   │
+│                                         │
+│  Đã chọn: 2 nhân viên                   │
+│           [Hủy]  [Xác nhận]            │
+└─────────────────────────────────────────┘
+```
+
+**⚡ LUỒNG THAO TÁC NGƯỜI DÙNG:**
+
+**Option 1: Chỉ edit thông tin (không giao lại)**
+1. Admin mở modal edit task
+2. Modal hiển thị **"Đang giao cho: [Tên nhân viên hiện tại]"** ở đầu section giao lại
+3. Sửa title, description, priority, checklist, deadline
+4. Bỏ qua phần "Chọn nhân viên mới" (không chọn gì)
+5. Click "Lưu thay đổi"
+6. → Backend cập nhật Broadcast fields, KHÔNG thay đổi employeeId, nhân viên hiện tại giữ nguyên
+
+**Option 2: Giao lại cho nhân viên cụ thể (Tab Nhân viên)**
+1. Admin mở modal edit task
+2. Modal hiển thị **"Đang giao cho: [Tên nhân viên hiện tại]"**
+3. Xem thông tin nhân viên hiện tại (tên, số điện thoại, chi nhánh)
+4. Click tab "Nhân viên" trong section "Chọn nhân viên mới"
+5. Tìm kiếm và click chọn 1 nhân viên KHÁC
+6. Nhân viên mới hiện trong "Nhân viên đã chọn"
+7. Click "Lưu thay đổi"
+8. → Backend cập nhật employeeId, thực hiện reassign logic, gửi notification
+
+**Option 3: Giao lại qua Chi nhánh (Tab Chi nhánh)**
+1. Admin mở modal edit task
+2. Modal hiển thị **"Đang giao cho: [Tên nhân viên hiện tại]"**
+3. Click tab "Chi nhánh" trong section "Chọn nhân viên mới"
+4. Click chọn 1 chi nhánh
+5. → Mở modal phụ "Chọn nhân viên - [Tên CN]"
+6. Tìm kiếm và chọn 1 nhân viên từ chi nhánh đó
+7. Click "Xác nhận" → Đóng modal phụ
+8. Nhân viên mới đã chọn hiện trong "Nhân viên đã chọn"
+9. Click "Lưu thay đổi"
+10. → Backend cập nhật employeeId, thực hiện reassign logic
+
+**Option 4: Edit + Giao lại cùng lúc**
+1. Admin mở modal edit task, xem thông tin nhân viên hiện tại
+2. Sửa title, description, deadline, v.v.
+3. Chọn nhân viên mới từ tab Chi nhánh hoặc Nhân viên
+4. Click "Lưu thay đổi"
+5. → Backend cập nhật CẢ broadcast fields VÀ employeeId
+
+**⚠️ QUY TẮC UI:**
+
+**Hiển thị thông tin nhân viên hiện tại:**
+- Khi mở modal edit, **luôn hiển thị** section "Đang giao cho" với thông tin nhân viên đang được giao:
+  - Tên nhân viên
+  - Số điện thoại
+  - Tên chi nhánh
+- Section này **không thể chỉnh sửa** (read-only display)
+- Giúp admin biết task đang giao cho ai trước khi quyết định giao lại
+
+**Chọn nhân viên mới (Giao lại):**
+- Phần "Chọn nhân viên mới" luôn là **tùy chọn** (optional)
+- Nếu không chọn nhân viên mới → Chỉ edit, không reassign, giữ nguyên nhân viên hiện tại
+- Chỉ được chọn **1 nhân viên duy nhất** (single selection)
+- Tab Chi nhánh → Chọn store → Mở modal chọn employees của store đó
+- Tab Nhân viên → Chọn trực tiếp từ danh sách tất cả nhân viên
+- Có nút "×" để xóa nhân viên đã chọn và chọn lại
+- UI tabs giống y hệt Assign Modal (tái sử dụng style)
+- Khi chọn nhân viên mới, hiển thị trong "Nhân viên đã chọn" ở dưới tabs
+
+**🔧 QUY TRÌNH XỬ LÝ BACKEND:**
+
+**Yêu cầu API cho Modal Edit (Load thông tin hiện tại):**
+- **Dashboard API** (`GET /api/dashboard/admin/tasks/:status`) phải trả về:
+  - `employeeId`: ID nhân viên hiện tại được giao
+  - `employeeName`: Tên đầy đủ nhân viên
+  - `employeePhone`: Số điện thoại nhân viên
+  - `employeeBranch`: Tên chi nhánh của nhân viên
+- Frontend dùng dữ liệu này để hiển thị section "Đang giao cho" khi mở modal
+- Nếu task chưa được giao (`employeeId: null`), hiển thị "Chưa giao cho nhân viên"
+
+**Xử lý request cập nhật:**
+
+1. Tìm UserTask theo id
+2. Xác thực quyền admin (middleware `authorizeAdmin`)
+3. **Populate employeeId** để lấy thông tin nhân viên hiện tại (cần cho reassign logic và notifications)
+4. Kiểm tra task đã hoàn thành chưa → Không edit được task đã hoàn thành (status='completed' hoặc 'approved')
+5. Khởi tạo flags theo dõi: `updatedBroadcast = false`, `reassigned = false`
+
+6. **PART 1 - Cập nhật Broadcast (nếu có các trường edit):**
+   - **Nếu có ít nhất 1 trong:** title, description, priority, deadline, checklist, recurring
+   - Tìm Broadcast document theo userTask.broadcastId
+   - Cập nhật các fields được gửi lên:
+     - `broadcast.title` ← title (nếu có)
+     - `broadcast.description` ← description (nếu có)
+     - `broadcast.priority` ← priority (nếu có)
+     - `broadcast.deadline` ← new Date(deadline) (nếu có)
+     - `broadcast.checklist` ← checklist array (nếu có)
+     - `broadcast.recurring` ← recurring object (nếu có)
+   - Lưu broadcast: `await broadcast.save()`
+   - **Nếu checklist thay đổi:**
+     - Cập nhật `userTask.checklist` với format:
+       ```javascript
+       userTask.checklist = checklist.map(item => ({
+         task: typeof item === 'string' ? item : item.task,
+         required: typeof item === 'object' ? item.required : true,
+         isCompleted: false,  // Reset completion status
+         completedAt: null
+       }))
+       ```
+   - Set flag: `updatedBroadcast = true`
+
+7. **PART 2 - Giao lại cho nhân viên mới (OPTIONAL):**
+   - **Chỉ xử lý nếu:** `newEmployeeId` được gửi lên VÀ khác với nhân viên hiện tại
+   - **Kiểm tra:** `if (newEmployeeId && newEmployeeId !== userTask.employeeId._id.toString())`
+   - a. Tìm nhân viên mới: `await Employee.findById(newEmployeeId).populate('ID_Branch')`
+   - b. Validate nhân viên mới:
+      - Employee tồn tại → Error 404 "Không tìm thấy employee mới"
+      - Employee đang hoạt động (`Trang_thai === "1"` hoặc `Status === 'Đang hoạt động'`) → Error 400
+      - Employee chưa có task này (tìm `UserTask` với `broadcastId` + `employeeId` này) → Error 400 "Nhân viên đã có task này rồi"
+   - c. **Lưu tham chiếu nhân viên cũ** (quan trọng cho notifications!): `const oldEmployee = userTask.employeeId`
+   - d. Cập nhật: `userTask.employeeId = newEmployeeId`
+   - e. **Kiểm tra cross-branch reassign:**
+      - So sánh `oldBranchId` vs `newBranchId`
+      - **Nếu khác branch:**
+        - Tìm hoặc tạo StoreTask mới cho branch mới:
+          ```javascript
+          let newStoreTask = await StoreTask.findOne({
+            broadcastId: userTask.broadcastId._id,
+            storeId: newBranchId
+          })
+          ```
+        - **Nếu chưa có StoreTask:**
+          - Tìm manager của branch mới (role='manager' hoặc fallback)
+          - Tạo StoreTask mới với managerId, status='pending', assignedEmployees=[newEmployeeId]
+        - **Nếu đã có StoreTask:**
+          - Thêm newEmployeeId vào `assignedEmployees` (nếu chưa có)
+        - Cập nhật `userTask.storeTaskId = newStoreTask._id`
+        - **Dọn dẹp StoreTask cũ:**
+          - Xóa oldEmployee._id khỏi `oldStoreTask.assignedEmployees`
+          - Lưu oldStoreTask
+      - **Nếu cùng branch:**
+        - Giữ nguyên StoreTask (không cần làm gì)
+   - f. **Tạo notifications:**
+      - Notification cho nhân viên mới (type='task_assigned')
+      - Notification cho nhân viên cũ (type='task_reassigned')
+   - g. Set flag: `reassigned = true`
+
+8. **Lưu UserTask:** `await userTask.save()`
+
+9. **Xác định action text cho response:**
+   ```javascript
+   let actionText = 'cập nhật';
+   if (updatedBroadcast && reassigned) {
+     actionText = 'cập nhật và giao lại';
+   } else if (reassigned) {
+     actionText = 'giao lại';
+   }
+   ```
+
+10. **Trả về response:**
+    ```json
+    {
+      "success": true,
+      "message": "Đã [actionText] công việc thành công",
+      "data": {
+        "userTask": {
+          "_id": "...",
+          "employeeId": "...",
+          "storeTaskId": "...",
+          "status": "...",
+          "updatedBroadcast": true/false,
+          "reassigned": true/false
+        }
+      }
+    }
+    ```
 
 **Quy tắc nghiệp vụ:**
-- Không edit được task đã approved
-- Không chuyển giao nếu nhân viên mới đã có task này
+- **Chỉ admin** có quyền (route prefix `/api/admin/`)
+- **Modal luôn hiển thị nhân viên hiện tại** trước khi cho phép giao lại
+- **Ít nhất 1 field phải được cung cấp:** Edit fields (title, description, ...) HOẶC employeeId
+- **employeeId là OPTIONAL:** Nếu không gửi → Giữ nguyên nhân viên hiện tại, chỉ edit thông tin
+- Không edit được task đã approved (status='approved')
+- Không edit được task đã completed (status='completed')
+- **Reassign chỉ xảy ra NẾU:** employeeId được gửi VÀ khác với nhân viên hiện tại
+- Không chuyển giao nếu nhân viên mới đã có task này (kiểm tra broadcast + employee unique)
 - Phải dùng UserTask._id (không phải StoreTask._id)
-- Chuyển giao cross-branch cập nhật cả hai StoreTasks
-- Cập nhật checklist reset isCompleted thành false
+- Chuyển giao cross-branch cập nhật cả hai StoreTasks (remove old, add new)
+- Cập nhật checklist reset isCompleted thành false cho tất cả items
+- **Giao diện cho phép chọn 1 nhân viên duy nhất** (khác với assign có thể chọn nhiều)
+- UI tái sử dụng tabs Chi nhánh/Nhân viên từ Assign Modal
+- **Dashboard API phải populate và trả về employeeName, employeePhone, employeeBranch** để hiển thị
+- **Response message động:** "Đã cập nhật công việc thành công" / "Đã giao lại công việc thành công" / "Đã cập nhật và giao lại công việc thành công"
+- **Response bao gồm flags:** `updatedBroadcast` (true/false) và `reassigned` (true/false) để frontend biết action nào đã thực hiện
 
-**Lịch sử bug:**
+**Lợi ích API mới:**
+- ✅ RESTful chuẩn: UserTask là resource, dùng PUT method
+- ✅ Rõ quyền hạn: `/admin/` prefix → chỉ admin có thể gọi
+- ✅ Tách biệt: `/my-tasks` (employee) vs `/admin/user-tasks` (admin)
+- ✅ Giảm risk nhầm ID: Route rõ ràng → ít sai hơn
+- ✅ UI nhất quán: Tái sử dụng pattern từ Assign Modal
+
+**Lịch sử thay đổi:**
 - ✅ ĐÃ SỬA 18/03/2026: Dashboard dùng sai ID (StoreTask._id thay vì UserTask._id)
 - ✅ ĐÃ SỬA 18/03/2026: Logic chuyển giao giờ lưu tham chiếu oldEmployee trước khi cập nhật
+- ✅ IMPROVED 20/03/2026: API chuẩn hóa `/api/admin/user-tasks/:id` (RESTful)
+- ✅ UI REFACTOR 20/03/2026: 
+  - Di chuyển phần Giao lại xuống dưới Deadline
+  - Thay đổi từ simple search box sang tabs Chi nhánh/Nhân viên
+  - Tái sử dụng UI pattern từ Assign Modal
+  - Cho phép chọn qua store hoặc trực tiếp employee
+- ✅ ENHANCED 20/03/2026:
+  - **Thêm hiển thị thông tin nhân viên hiện tại** trong modal edit
+  - Section "Đang giao cho" hiển thị tên, SĐT, chi nhánh nhân viên đang được giao
+  - Dashboard API bổ sung trả về: employeeName, employeePhone, employeeBranch
+  - Giúp admin biết task đang giao cho ai trước khi quyết định giao lại
+- ✅ **MAJOR FIX 20/03/2026 - Backend hỗ trợ Edit + Reassign linh hoạt:**
+  - **Bug:** Backend `reassignUserTask()` chỉ hỗ trợ reassign, bắt buộc phải có employeeId
+  - **Problem:** User không thể edit task mà không giao lại (lỗi 404 "Không tìm thấy employee mới")
+  - **Fix:** Viết lại controller để hỗ trợ 3 trường hợp:
+    1. Edit only: Gửi broadcast fields, không gửi employeeId → Chỉ cập nhật Broadcast
+    2. Reassign only: Chỉ gửi employeeId → Chỉ giao lại
+    3. Edit + Reassign: Gửi cả hai → Cập nhật cả Broadcast và giao lại
+  - **Implementation:**
+    - PART 1: Kiểm tra có broadcast fields → Cập nhật Broadcast + checklist
+    - PART 2: Kiểm tra có employeeId VÀ khác nhân viên hiện tại → Thực hiện reassign logic
+    - Response trả về flags `updatedBroadcast` và `reassigned` để frontend biết action nào đã xảy ra
+    - Success message động: "cập nhật" / "giao lại" / "cập nhật và giao lại"
+  - **Code structure:** Phân tách rõ ràng 2 parts logic, dễ maintain và debug
+  - **Validation:** employeeId trở thành optional, ít nhất 1 field phải được gửi
 
 ### 2.9 Xóa UserTask ⭐
 
-**Endpoint:** `DELETE /api/broadcasts/user-tasks/:taskId`  
+**Endpoint:** `DELETE /api/admin/user-tasks/:id`  
 **Quyền:** Riêng tư (chỉ admin)
 
+**⚠️ REFACTOR (20/03/2026):**
+- **Cũ:** `DELETE /api/broadcasts/user-tasks/:taskId` ❌
+- **Mới:** `DELETE /api/admin/user-tasks/:id` ✅
+
 **Quy trình:**
-1. Tìm UserTask theo taskId
-2. Kiểm tra đã hoàn thành chưa → Không xóa được task đã hoàn thành
+1. Tìm UserTask theo id
+2. Xác thực quyền admin
+3. Kiểm tra đã hoàn thành chưa → Không xóa được task đã hoàn thành
 3. **Xóa employee khỏi StoreTask.assignedEmployees**
 4. **Nếu StoreTask không còn assignedEmployees:**
    - Xóa luôn StoreTask (dọn dẹp)
 5. Xóa UserTask
 
 **Quy tắc nghiệp vụ:**
+- **Chỉ admin** có quyền xóa UserTask
 - Không xóa được task đã approved (đề xuất truy cập trực tiếp database nếu cần)
 - Phải dùng UserTask._id (không phải StoreTask._id)
 - Cascade sang StoreTask nếu rỗng
 
 **Lịch sử bug:**
 - ✅ ĐÃ SỬA 18/03/2026: Dùng sai ID (StoreTask._id thay vì UserTask._id)
+- ✅ IMPROVED 20/03/2026: API chuẩn hóa `/api/admin/user-tasks/:id`
 
 ---
 
@@ -815,21 +1111,25 @@ if (!allRequiredCompleted) {
 3. Với các loại khác: query StoreTask trực tiếp
 4. **Với mỗi StoreTask:**
    - Tìm UserTask đầu tiên (để lấy userTaskId và employeeId)
-   - Populate tên nhân viên
+   - **Populate employeeId.Phone và employeeId.ID_Branch** (nested populate)
+   - Lấy thông tin nhân viên: Ho_va_ten/FullName, Phone, ID_Branch.Name/ID_Branch.Map_Address
 5. **Format response:**
-   - broadcastTitle, storeName, managerName, employeeName
+   - broadcastTitle, storeName, managerName
+   - **employeeId, employeeName, employeePhone, employeeBranch** (thông tin nhân viên được giao)
    - deadline, status, priority, completionPercent
    - **userTaskId** (cho reassign/delete operations)
    - Các timestamps khác nhau
 
 **Quy tắc nghiệp vụ:**
 - Trả về userTaskId (QUAN TRỌNG cho reassign/delete)
-- Trả về employeeName hoặc "Chưa giao" nếu chưa assign
+- **Trả về đầy đủ thông tin nhân viên:** employeeName, employeePhone, employeeBranch
+- Nếu chưa assign: employeeName="Chưa giao", employeePhone=null, employeeBranch=null
 - Tính overdue dựa trên broadcast deadline
 - Sắp xếp phù hợp theo status
 
 **Lịch sử bug:**
 - ✅ ĐÃ SỬA 18/03/2026: Thêm trường userTaskId và employeeName
+- ✅ **ENHANCED 20/03/2026:** Thêm employeePhone và employeeBranch cho modal Edit hiển thị thông tin nhân viên hiện tại
 
 ### 6.3 Dashboard Manager
 
@@ -914,9 +1214,10 @@ if (!allRequiredCompleted) {
 
 **GET /api/employees**
 - Liệt kê nhân viên với bộ lọc
-- Query: role, branchId, status, search, page, limit
-- Manager chỉ xem nhân viên branch mình
+- Query: role, **branchId**, status, search, page, limit
+- Manager chỉ xem nhân viên branch mình (auto-filter)
 - Admin xem tất cả nhân viên
+- **Dùng `?branchId=xxx` thay vì `/api/brands/:id/employees`**
 
 **GET /api/employees/:id**
 - Lấy chi tiết nhân viên
@@ -954,10 +1255,11 @@ if (!allRequiredCompleted) {
 
 **GET /api/brands/:id**
 - Lấy chi tiết branch
+- Không populate employees (dùng `GET /api/employees?branchId=xxx` riêng)
 
-**GET /api/brands/:id/employees**
-- Lấy nhân viên của branch
-- Dùng Employee collection với ID_Branch filter
+**⚠️ DEPRECATED (20/03/2026):**
+- ~~`GET /api/brands/:id/employees`~~ → Dùng `GET /api/employees?branchId=xxx` thay thế
+- Lý do: RESTful hơn, Employee là resource chính, branch chỉ là filter
 
 **❌ CÁC THAO TÁC ĐÃ XÓA (19/03/2026):**
 - ~~PUT /api/brands/:id~~ (cập nhật)

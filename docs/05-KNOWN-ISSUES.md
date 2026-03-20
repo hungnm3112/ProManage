@@ -1,24 +1,32 @@
 # 05 - AUDIT CÁC VẤN ĐỀ ĐÃ BIẾT
 
 **Ngày audit:** 19/03/2026  
-**Cập nhật cuối:** 20/03/2026 (Phase 6)  
-**Mục đích:** Ghi chép tất cả bugs, workarounds, technical debt  
+**Cập nhật cuối:** 20/03/2026 (Fixed Monthly Recurring Dropdown UI)  
+**Mục đích:** Ghi chép bugs, workarounds, technical debt + Ready-to-code tasks  
 **Phạm vi:** Toàn bộ codebase
+
+**🆕 NEW SECTION:** Implementation Queue - Tasks với complete specs, ready để implement code
 
 ---
 
 ## 📊 TỔNG QUAN
 
-**Tổng số vấn đề:** 14
-- ✅ Đã sửa: 4
-- ⚠️ Known Issues: 6
+**Tổng số vấn đề:** 15
+- ✅ Đã sửa: 5
+- 🚀 Implementation Queue: 5 (Ready to code)
+- ⚠️ Known Issues: 5
 - 🔧 Technical Debt: 4
 
 **Mức độ ưu tiên:**
 - 🔴 CRITICAL: 1 (DevTools - chỉ critical nếu production)
 - 🟡 HIGH: 2
 - 🟢 MEDIUM: 8
-- ⚪ LOW: 3
+- ⚪ LOW: 4
+
+**Implementation Queue Priority:**
+- 🔴 P0 - API Refactoring: 3 tasks (REFACTOR-001, 002, 003) ✅ COMPLETED
+- 🔴 P1 - Security: 1 task (SECURITY-001)
+- 🟡 P2 - Performance: 1 task (PERF-001)
 
 ---
 
@@ -54,7 +62,42 @@ ref: 'Employee'
 
 ---
 
-### 2. Dashboard dùng sai UserTask ID ✅
+### 2. Monthly Recurring Dropdown chỉ có 10 ngày ✅
+
+**Ngày phát hiện:** 20/03/2026  
+**Ngày sửa:** 20/03/2026  
+**Mức độ:** 🟡 HIGH  
+
+**Mô tả vấn đề:**
+- File: `src/views/pages/admin/dashboard.ejs` (lines 287-297, 718-729)
+- Dropdown `#monthlyDay` chỉ có 10 options: 1,2,3,5,10,15,20,25,28,"last"
+- Không thể chọn ngày 4,6-9,11-14,16-19,21-24,26-27,29-31
+- Backend Broadcast model đã hỗ trợ 1-31 và "last", nhưng UI giới hạn
+
+**Tác động:**
+- Không thể tạo broadcast lặp lại cho các ngày như: 21 (ngày chốt lương), 27 (ngày trả lương), 30 (ngày đóng tiền thuê)
+- Giảm tính linh hoạt của hệ thống
+- UX rất kém cho admin
+
+**Solution:**
+- Thay thế `<select>` dropdown bằng `<input type="number" min="1" max="31">`
+- Thêm checkbox "Ngày cuối tháng" để hỗ trợ "last"
+- Khi checkbox checked, disable number input
+- Cập nhật JavaScript xử lý logic tương ứng
+
+**Files đã sửa:**
+- `src/views/pages/admin/dashboard.ejs` - Thay dropdown bằng number input + checkbox (2 locations)
+- `public/js/admin-dashboard.js` - Cập nhật logic xử lý checkbox và number input
+
+**Kết quả:**
+- ✅ UI giờ hỗ trợ đầy đủ 31 ngày + ngày cuối tháng
+- ✅ Native HTML5 input validation (min/max)
+- ✅ UX tốt hơn cho admin
+- ✅ Không cần thay đổi backend code
+
+---
+
+### 3. Dashboard dùng sai UserTask ID ✅
 
 **Ngày phát hiện:** 18/03/2026  
 **Ngày sửa:** 18/03/2026  
@@ -551,7 +594,271 @@ notificationSchema.index({ userId: 1, isRead: 1 });
 
 ---
 
-## 📊 THỐNG KÊ VÀ ƯU TIÊN
+## � IMPLEMENTATION QUEUE (Ready to Code)
+
+**Mục đích:** Danh sách tasks đã được analyze, có đủ documentation, ready để implement code  
+**Workflow:** Known Issue → Queue (prioritize) → Implementation → Bugs Đã Sửa
+
+---
+
+### 🔴 PRIORITY 0 - API Refactoring (March 20, 2026)
+
+#### REFACTOR-001: Implement /api/admin/user-tasks routes ⏳
+
+**Status:** 📋 Ready to implement  
+**Related docs updated:** ✅ 01-BUSINESS-LOGIC.md § 2.8, 2.9 | ✅ 03-API-REFERENCE.md § 10  
+**Related issues:** N/A (enhancement, not bug fix)  
+**Blocking:** None  
+**Effort estimate:** 2-3 giờ
+
+**Documentation references:**
+- [01-BUSINESS-LOGIC.md § 2.8](01-BUSINESS-LOGIC.md#28-reassign-usertask) - Reassign UserTask logic
+- [01-BUSINESS-LOGIC.md § 2.9](01-BUSINESS-LOGIC.md#29-delete-usertask) - Delete UserTask logic
+- [03-API-REFERENCE.md § 1️⃣0️⃣ ADMIN](03-API-REFERENCE.md#1️⃣0️⃣-admin) - Complete API specs
+
+**Files to CREATE:**
+- `src/controllers/adminController.js`
+  - Function: `reassignUserTask(req, res)`
+  - Function: `deleteUserTask(req, res)`
+- `src/routes/adminRoutes.js`
+  - Route: `PUT /api/admin/user-tasks/:id`
+  - Route: `DELETE /api/admin/user-tasks/:id`
+
+**Files to UPDATE:**
+- `src/routes/index.js` - Register adminRoutes
+- `src/middleware/authMiddleware.js` - Verify `authorizeAdmin` middleware exists
+
+**Implementation checklist:**
+- [ ] Create adminController.js with 2 functions
+- [ ] Implement reassignUserTask() logic (6 steps from Business Logic)
+- [ ] Implement deleteUserTask() logic (7 steps from Business Logic)
+- [ ] Create adminRoutes.js with 2 routes
+- [ ] Apply authorizeAdmin middleware to both routes
+- [ ] Register routes in index.js under `/api/admin`
+- [ ] Test: Admin can reassign/delete (200)
+- [ ] Test: Manager/Employee get 403
+- [ ] Test: Invalid userTaskId gets 404
+- [ ] Test: Completed task cannot be deleted (400)
+
+**Validation requirements:**
+- Authorization: `req.user.role === 'admin'`
+- UserTask must exist and not completed
+- Employee must be active (Trang_thai = "1")
+- Cross-store reassign: Handle 2 StoreTasks atomically
+
+**Success criteria:**
+- All 10 checklist items passed
+- Response format matches 03-API-REFERENCE.md
+- No violations of Rules 1-7
+- Code passes manual testing in UI
+
+**Commit format:**
+```bash
+git checkout -b feature/REFACTOR-001-admin-routes
+# ... implement ...
+git commit -m "feat(admin): implement /api/admin/user-tasks routes
+
+- Add adminController with reassignUserTask and deleteUserTask
+- Add adminRoutes with PUT/DELETE /api/admin/user-tasks/:id
+- Apply authorizeAdmin middleware
+- Refs: 01-BUSINESS-LOGIC § 2.8, 2.9
+- Refs: 03-API-REFERENCE § 10"
+```
+
+---
+
+#### REFACTOR-002: Deprecate old broadcast user-task routes ⏳
+
+**Status:** 🔗 Blocked by REFACTOR-001  
+**Related docs updated:** ✅ 01-BUSINESS-LOGIC.md | ✅ 03-API-REFERENCE.md  
+**Related issues:** Bug #2, #3 (context)  
+**Blocking:** REFACTOR-001 must be completed first  
+**Effort estimate:** 30 phút
+
+**Documentation references:**
+- [03-API-REFERENCE.md - Deprecated routes](03-API-REFERENCE.md#put-apibroadcastsuser-taskstaskid)
+
+**Files to UPDATE:**
+- `src/controllers/broadcastController.js`
+  - Function: `updateUserTask()` - Add deprecation warning log
+  - Function: `deleteUserTask()` - Add deprecation warning log
+- `src/routes/broadcastRoutes.js`
+  - Add comments marking routes as deprecated
+
+**Implementation checklist:**
+- [ ] Add console.warn in updateUserTask: "DEPRECATED: Use PUT /api/admin/user-tasks/:id"
+- [ ] Add console.warn in deleteUserTask: "DEPRECATED: Use DELETE /api/admin/user-tasks/:id"
+- [ ] Add JSDoc @deprecated tags
+- [ ] Update route comments in broadcastRoutes.js
+- [ ] Verify old routes still work (backward compatibility)
+- [ ] Document migration path in code comments
+
+**Success criteria:**
+- Old routes still functional
+- Deprecation warnings logged
+- Clear migration instructions in code
+
+**Commit format:**
+```bash
+git commit -m "refactor(broadcast): mark user-task admin routes as deprecated
+
+- Add deprecation warnings to updateUserTask/deleteUserTask
+- Document migration to /api/admin/user-tasks
+- Maintain backward compatibility
+- Related: REFACTOR-001"
+```
+
+---
+
+#### REFACTOR-003: Remove /brands/:id/employees endpoint ⏳
+
+**Status:** 📋 Ready to implement  
+**Related docs updated:** ✅ 01-BUSINESS-LOGIC.md § 7.2 | ✅ 03-API-REFERENCE.md  
+**Related issues:** Bug #4 (READ-ONLY context)  
+**Blocking:** None  
+**Effort estimate:** 1 giờ
+
+**Documentation references:**
+- [01-BUSINESS-LOGIC.md § 7.2](01-BUSINESS-LOGIC.md#72-brand-management) - Deprecated endpoint note
+- [03-API-REFERENCE.md - Brands](03-API-REFERENCE.md#get-apibrandsidemployees) - Migration guide
+
+**Files to UPDATE:**
+- `src/controllers/brandController.js`
+  - Remove function: `getBrandEmployees()`
+  - OR mark deprecated with warning
+- `src/routes/brandRoutes.js`
+  - Remove route: `GET /api/brands/:id/employees`
+  - OR mark deprecated
+
+**Implementation options:**
+
+**Option A - Hard removal (Recommended):**
+- Delete function completely
+- Delete route completely
+- Users must use `GET /api/employees?branchId=xxx`
+
+**Option B - Soft deprecation:**
+- Keep function but add deprecation warning
+- Return 410 Gone with migration message
+
+**Implementation checklist (Option B recommended for safety):**
+- [ ] Update getBrandEmployees() to return 410 Gone
+- [ ] Response body includes migration instructions
+- [ ] Log deprecation warning
+- [ ] Update route comment: "DEPRECATED - Use GET /api/employees?branchId=xxx"
+- [ ] Test: Endpoint returns 410 with clear message
+- [ ] Verify GET /api/employees?branchId works correctly
+
+**Success criteria:**
+- Endpoint returns 410 Gone
+- Error message includes: "Use GET /api/employees?branchId={id}"
+- No breaking changes for systems using new endpoint
+
+**Commit format:**
+```bash
+git commit -m "refactor(brands): deprecate GET /brands/:id/employees
+
+- Return 410 Gone with migration instructions
+- Redirect users to GET /api/employees?branchId=xxx
+- Refs: 01-BUSINESS-LOGIC § 7.2
+- Related: API refactoring March 20, 2026"
+```
+
+---
+
+### 🔴 PRIORITY 1 - Critical Security (Before Production)
+
+#### SECURITY-001: Disable DevTools in production ⏳
+
+**Status:** 📋 Ready to implement  
+**Related docs updated:** ✅ 03-API-REFERENCE.md § 11  
+**Related issues:** Issue #14 (DevTools exposed)  
+**Blocking:** None  
+**Effort estimate:** 30 phút
+
+**Documentation references:**
+- [05-KNOWN-ISSUES.md § 14](05-KNOWN-ISSUES.md#14-devtools-endpoints-exposed-in-production-🔴) - Full issue description
+- [03-API-REFERENCE.md § DEV TOOLS](03-API-REFERENCE.md#1️⃣1️⃣-dev-tools)
+
+**Files to UPDATE:**
+- `src/routes/index.js` - Conditional registration
+- `src/routes/devToolsRoutes.js` - Add environment check middleware
+- `.env.production` - Add NODE_ENV=production
+
+**Implementation checklist:**
+- [ ] Add environment check in index.js (Option 1)
+- [ ] OR add middleware in devToolsRoutes.js (Option 2)
+- [ ] Create .env.production with NODE_ENV=production
+- [ ] Test: DevTools work in development (NODE_ENV=development)
+- [ ] Test: DevTools blocked in production (403 Forbidden)
+- [ ] Verify GET /api/dev/accounts returns 403
+- [ ] Verify POST /api/dev/quick-login returns 403
+
+**Code snippet (Option 1 - Recommended):**
+```javascript
+// src/routes/index.js
+if (process.env.NODE_ENV === 'development') {
+  app.use('/api/dev', devToolsRoutes);
+  console.log('⚠️  DevTools enabled (development mode)');
+} else {
+  console.log('✅ DevTools disabled (production mode)');
+}
+```
+
+**Success criteria:**
+- Production build has no /api/dev endpoints
+- Development build works normally
+- Clear console messages about DevTools status
+
+**Commit format:**
+```bash
+git commit -m "fix(security): disable DevTools endpoints in production
+
+- Add NODE_ENV check in routes registration
+- Create .env.production with production config
+- Prevent authentication bypass in production
+- Fixes: Issue #14
+- Priority: CRITICAL"
+```
+
+---
+
+### 🟡 PRIORITY 2 - Performance & Quality
+
+#### PERF-001: Add database indexes ⏳
+
+**Status:** 📋 Ready to implement  
+**Related docs updated:** N/A (code-only)  
+**Related issues:** Issue #10 (Database indexes)  
+**Blocking:** None  
+**Effort estimate:** 1-2 giờ
+
+**Files to UPDATE:**
+- `src/models/UserTask.js` - Add 3 indexes
+- `src/models/StoreTask.js` - Add 2 indexes  
+- `src/models/Notification.js` - Add 1 index
+
+**Implementation checklist:**
+- [ ] Add UserTask indexes (employeeId, storeTaskId+status, broadcastId+employeeId)
+- [ ] Add StoreTask indexes (managerId, broadcastId+storeId)
+- [ ] Add Notification index (userId+isRead)
+- [ ] Test query performance before/after
+- [ ] Verify unique constraints work correctly
+- [ ] Document index purposes in code comments
+
+**Commit format:**
+```bash
+git commit -m "perf(db): add indexes for frequently queried fields
+
+- UserTask: employeeId, storeTaskId+status, broadcastId+employeeId
+- StoreTask: managerId, broadcastId+storeId
+- Notification: userId+isRead
+- Resolves: Issue #10"
+```
+
+---
+
+## �📊 THỐNG KÊ VÀ ƯU TIÊN
 
 ### Theo mức độ nghiêm trọng:
 
@@ -565,25 +872,34 @@ notificationSchema.index({ userId: 1, isRead: 1 });
 
 ### Roadmap sửa lỗi đề xuất:
 
-**Sprint 0 (Trước Production):**
-- #14: Disable DevTools in production (CRITICAL) - 30 phút
+**🚀 Implementation Queue (Ready to Code):**
+- See [IMPLEMENTATION QUEUE](#-implementation-queue-ready-to-code) section above for detailed specs
 
-**Sprint 1 (Week 1):**
+**Sprint 0 (Trước Production) - CRITICAL:**
+- SECURITY-001: Disable DevTools in production - 30 phút ⚡
+- REFACTOR-001: Implement /api/admin routes - 2-3 giờ
+- REFACTOR-002: Deprecate old routes - 30 phút
+- REFACTOR-003: Remove /brands/:id/employees - 1 giờ
+
+**Sprint 1 (Week 1) - HIGH:**
+- PERF-001: Add database indexes - 1-2 giờ
 - #13: Setup tests infrastructure (HIGH)
 - #5: Implement recurring broadcast scheduler (HIGH)
-- #10: Thêm database indexes (MEDIUM)
 
-**Sprint 2 (Week 2):**
+**Sprint 2 (Week 2) - MEDIUM:**
 - #8: Implement rate limiting (MEDIUM)
 - #6: Thay console.log bằng proper logger (MEDIUM)
 - #7: Add input sanitization (MEDIUM)
 
-**Sprint 3 (Week 3):**
+**Sprint 3 (Week 3) - LOW:**
 - #9: Implement refresh token (LOW)
 - #11: Standardize validators (LOW)
 - #12: Add Swagger documentation (LOW)
 
-**Tổng effort ước tính:** 52-72 giờ (~2-3 tuần với 1 developer)
+**Tổng effort ước tính:** 
+- Implementation Queue: ~5-7 giờ (P0-P1)
+- Known Issues: ~52-72 giờ
+- **Grand Total:** ~57-79 giờ (~2-3 tuần với 1 developer)
 
 ---
 
@@ -609,6 +925,35 @@ notificationSchema.index({ userId: 1, isRead: 1 });
 **Không review:**
 - Frontend code (ngoài scope)
 - Infrastructure/DevOps (ngoài scope)
+
+---
+
+## 📝 IMPLEMENTATION QUEUE NOTES
+
+**Purpose:** Bridge giữa documentation và implementation  
+**Lifecycle:** Issue/Enhancement → Queue → Implementation → Bugs Đã Sửa
+
+**How to use:**
+1. **For AI implementation:** 
+   ```
+   "Implement REFACTOR-001 from 05-KNOWN-ISSUES.md § Implementation Queue"
+   ```
+2. **For developers:**
+   - Read task spec trong Implementation Queue
+   - Create feature branch: `feature/TASK-ID-description`
+   - Follow checklist
+   - Commit theo format đã định
+   - Move task to "Bugs Đã Sửa" when done
+
+**Queue management:**
+- ⏳ = Ready to implement
+- 🔗 = Blocked by other tasks
+- ✅ = Completed (move to "Bugs Đã Sửa")
+
+**Maintenance:**
+- Review queue mỗi sprint
+- Update priorities khi cần
+- Archive completed tasks to CHANGELOG
 
 ---
 
