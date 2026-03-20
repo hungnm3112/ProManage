@@ -117,11 +117,44 @@ const getBrandById = async (req, res) => {
  * @route   GET /api/brands/:id/employees
  * @desc    Get all employees of a brand
  * @access  Private (admin, manager)
+/**
+ * @deprecated Since March 20, 2026
+ * @route   GET /api/brands/:id/employees
+ * @desc    Get all employees of a brand
+ * @access  Private (admin, manager)
  * @note    Manager can only see their own branch employees
+ * 
+ * ⚠️  DEPRECATED: This endpoint is no longer recommended
+ * 
+ * Migration guide:
+ * - OLD: GET /api/brands/:id/employees
+ * - NEW: GET /api/employees?branchId={id}
+ * 
+ * Reason: RESTful standards - Employee is the primary resource, branch is just a filter
+ * 
+ * This endpoint returns 410 Gone to inform clients about the migration.
  */
 const getBrandEmployees = async (req, res) => {
   try {
     const { id } = req.params;
+    
+    // DEPRECATION: Return 410 Gone with migration instructions
+    console.warn(`⚠️  DEPRECATED: GET /api/brands/${id}/employees called. Use GET /api/employees?branchId=${id} instead.`);
+    
+    return res.status(410).json({
+      success: false,
+      message: 'Endpoint deprecated',
+      deprecationNotice: {
+        deprecated: true,
+        since: '2026-03-20',
+        reason: 'RESTful standards - Employee is the primary resource, branch is just a filter',
+        oldEndpoint: `/api/brands/${id}/employees`,
+        newEndpoint: `/api/employees?branchId=${id}`,
+        documentation: '01-BUSINESS-LOGIC.md § 7.2 | 03-API-REFERENCE.md'
+      }
+    });
+    
+    /* ORIGINAL CODE (kept for reference, remove in future versions):
     const currentUser = req.user;
     const currentUserRole = await getEmployeeRole(currentUser);
     
@@ -154,6 +187,7 @@ const getBrandEmployees = async (req, res) => {
       employees,
       total: employees.length
     });
+    */
   } catch (error) {
     console.error('getBrandEmployees error:', error);
     return sendError(res, error.message, 500);

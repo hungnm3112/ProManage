@@ -43,10 +43,21 @@ router.get(
 );
 
 /**
+ * @deprecated Since March 20, 2026
  * @route   GET /api/brands/:id/employees
  * @desc    Get all employees of a brand
  * @access  Private (admin, manager)
  * @note    Manager can only see their own branch employees
+ * 
+ * ⚠️  DEPRECATED: Use GET /api/employees?branchId={id} instead
+ * 
+ * This endpoint returns 410 Gone with migration instructions.
+ * 
+ * Migration guide:
+ * - OLD: GET /api/brands/:id/employees
+ * - NEW: GET /api/employees?branchId={id}
+ * 
+ * Reason: RESTful standards - Employee is the primary resource
  */
 router.get(
   '/:id/employees',

@@ -762,11 +762,24 @@ const assignBroadcast = async (req, res) => {
  * @route   PUT /api/broadcasts/user-tasks/:taskId
  * @access  Private/Admin
  */
+/**
+ * @deprecated Since March 20, 2026 - Use PUT /api/admin/user-tasks/:id instead
+ * @see adminController.reassignUserTask
+ * 
+ * DEPRECATED ROUTE: /api/broadcasts/user-tasks/:taskId
+ * NEW ROUTE: /api/admin/user-tasks/:id
+ * 
+ * Reason: RESTful standards, clearer admin permissions
+ * 
+ * This function is kept for backward compatibility but will be removed in future versions.
+ */
 const updateUserTask = async (req, res) => {
   try {
     const { taskId } = req.params;
     const updates = req.body;
     
+    // DEPRECATION WARNING
+    console.warn('⚠️  DEPRECATED: PUT /api/broadcasts/user-tasks/:taskId is deprecated. Use PUT /api/admin/user-tasks/:id instead.');
     console.log(`[updateUserTask] Updating task ${taskId}:`, updates);
     
     // Find the UserTask
@@ -910,6 +923,16 @@ const updateUserTask = async (req, res) => {
 };
 
 /**
+ * @deprecated Since March 20, 2026 - Use DELETE /api/admin/user-tasks/:id instead
+ * @see adminController.deleteUserTask
+ * 
+ * DEPRECATED ROUTE: /api/broadcasts/user-tasks/:taskId
+ * NEW ROUTE: /api/admin/user-tasks/:id
+ * 
+ * Reason: RESTful standards, clearer admin permissions
+ * 
+ * This function is kept for backward compatibility but will be removed in future versions.
+ * 
  * @desc    Delete a UserTask (cannot delete completed tasks)
  * @route   DELETE /api/broadcasts/user-tasks/:taskId
  * @access  Private/Admin
@@ -918,6 +941,8 @@ const deleteUserTask = async (req, res) => {
   try {
     const { taskId } = req.params;
     
+    // DEPRECATION WARNING
+    console.warn('⚠️  DEPRECATED: DELETE /api/broadcasts/user-tasks/:taskId is deprecated. Use DELETE /api/admin/user-tasks/:id instead.');
     console.log(`[deleteUserTask] Deleting task ${taskId}`);
     
     // Find the UserTask

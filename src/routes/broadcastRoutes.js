@@ -106,9 +106,18 @@ router.post(
 );
 
 /**
+ * @deprecated Since March 20, 2026
  * @route   PUT /api/broadcasts/user-tasks/:taskId
  * @desc    Update a user task (admin can edit task details and reassign)
  * @access  Private (admin only)
+ * 
+ * ⚠️  DEPRECATED: Use PUT /api/admin/user-tasks/:id instead
+ * 
+ * Migration guide:
+ * - OLD: PUT /api/broadcasts/user-tasks/:taskId
+ * - NEW: PUT /api/admin/user-tasks/:id
+ * 
+ * This route is kept for backward compatibility but will be removed in future versions.
  */
 router.put(
   '/user-tasks/:taskId',
@@ -119,9 +128,18 @@ router.put(
 );
 
 /**
+ * @deprecated Since March 20, 2026
  * @route   DELETE /api/broadcasts/user-tasks/:taskId
  * @desc    Delete a user task (cannot delete completed tasks)
  * @access  Private (admin only)
+ * 
+ * ⚠️  DEPRECATED: Use DELETE /api/admin/user-tasks/:id instead
+ * 
+ * Migration guide:
+ * - OLD: DELETE /api/broadcasts/user-tasks/:taskId
+ * - NEW: DELETE /api/admin/user-tasks/:id
+ * 
+ * This route is kept for backward compatibility but will be removed in future versions.
  */
 router.delete(
   '/user-tasks/:taskId',

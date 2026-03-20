@@ -11,6 +11,7 @@ const reviewRoutes = require('./reviewRoutes');
 const dashboardRoutes = require('./dashboardRoutes');
 const notificationRoutes = require('./notificationRoutes');
 const uploadRoutes = require('./uploadRoutes');
+const adminRoutes = require('./adminRoutes'); // NEW: Admin operations
 const devRoutes = require('./devRoutes');
 
 // Mount routes
@@ -24,6 +25,7 @@ router.use('/reviews', reviewRoutes);
 router.use('/dashboard', dashboardRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/upload', uploadRoutes);
+router.use('/admin', adminRoutes); // NEW: Admin routes (March 20, 2026)
 
 // Development tools (only in dev environment)
 router.use('/dev', devRoutes);
