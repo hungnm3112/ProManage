@@ -176,7 +176,7 @@
   Link_Description: String
   
   // Other
-  Active_Schedule: String // "true" | "false"
+  Active_Schedule: Boolean // true | false (Boolean thực, không phải String)
   PercentPayment: String
 }
 ```
@@ -662,10 +662,11 @@ assigned → in_progress → submitted → approved
 
 1. **Boolean as Strings**
    - Models: Employee, Brand
-   - Fields: `is_timekeeping_all`, `Active`, `Active_Schedule`
+   - Fields: `is_timekeeping_all`, `Active` (Brand)
    - Values: `"true"` / `"false"` instead of boolean
    - **Impact:** Need string comparison, not boolean
    - **Status:** ⚠️ Legacy database format
+   - **Note:** `Active_Schedule` (Brand) là **Boolean thực** (true/false) — KHÔNG phải String, không cần parse
 
 2. **Numbers as Strings**
    - Model: Employee

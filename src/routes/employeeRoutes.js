@@ -29,7 +29,7 @@ const { authorize } = require('../middlewares/authMiddleware');
 router.get(
   '/',
   authenticate,
-  authorize('admin', 'manager'),
+  authorize('admin', 'manager', 'employee'),
   validateGetEmployees,
   getEmployees
 );

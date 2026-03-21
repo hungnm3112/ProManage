@@ -52,6 +52,32 @@ const userTaskSchema = new mongoose.Schema({
     },
     completedAt: {
       type: Date
+    },
+    // Nhân viên được phân công thực hiện item này (null = assignedPerson tự làm)
+    assignedTo: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Employee',
+      default: null
+    },
+    // Trạng thái review item (chỉ có khi assignedTo != null)
+    reviewStatus: {
+      type: String,
+      enum: ['pending_review', 'approved', 'rejected'],
+      default: null
+    },
+    reviewedAt: {
+      type: Date,
+      default: null
+    },
+    // Người phụ trách review (là UserTask.employeeId)
+    reviewedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Employee',
+      default: null
+    },
+    reviewNote: {
+      type: String,
+      default: ''
     }
   }],
 
@@ -119,6 +145,8 @@ const userTaskSchema = new mongoose.Schema({
 userTaskSchema.index({ storeTaskId: 1, employeeId: 1 });
 userTaskSchema.index({ employeeId: 1, status: 1 });
 userTaskSchema.index({ storeTaskId: 1, status: 1 });
+// Multikey index: tìm nhanh UserTask theo nhân viên được tag trong checklist
+userTaskSchema.index({ 'checklist.assignedTo': 1 });
 
 /**
  * Virtual: checklistProgress

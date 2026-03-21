@@ -131,9 +131,9 @@ employeeId: {
 
 **Boolean as String:**
 - ❌ `Active: "true"/"false"` (Brand model)
-- ❌ `Active_Schedule: "true"/"false"` (Brand model)
 - ❌ `is_timekeeping_all: "true"/"false"` (Employee model)
 - ✅ **Phải parse:** `JSON.parse(value)` hoặc `value === "true"`
+- ✅ `Active_Schedule: true/false` (Brand model) — Boolean thực, dùng trực tiếp không cần parse
 
 **Number as String:**
 - ❌ `Salary: "5000000"` (Employee model) - String, không phải Number
@@ -978,7 +978,7 @@ Authorization: Bearer {TOKEN}
         "Dia_chi": "123 Nguyễn Huệ, Quận 1, TP.HCM",
         "Dien_thoai": "0289876543",
         "Active": "true",
-        "Active_Schedule": "true",
+        "Active_Schedule": true,
         "createdAt": "2025-12-01T08:00:00.000Z"
       },
       {
@@ -987,7 +987,7 @@ Authorization: Bearer {TOKEN}
         "Dia_chi": "456 Lê Văn Sỹ, Quận 3, TP.HCM",
         "Dien_thoai": "0289876544",
         "Active": "true",
-        "Active_Schedule": "false",
+        "Active_Schedule": false,
         "createdAt": "2025-12-05T08:00:00.000Z"
       }
     ],
@@ -1019,14 +1019,14 @@ curl -X GET "http://localhost:5000/api/brands?active=true&page=1" \
 
 ⚠️ **DATA TYPE WARNING (Rule 6):**
 - `Active`: String **"true"/"false"** - KHÔNG phải Boolean!
-- `Active_Schedule`: String **"true"/"false"** - KHÔNG phải Boolean!
-- **Frontend PHẢI parse:**
+- `Active_Schedule`: **Boolean thực** (true/false) - dùng trực tiếp, không cần parse
+- **Frontend PHẢI parse `Active`, KHÔNG cần parse `Active_Schedule`:**
   ```javascript
-  // Check if brand is active
+  // Check if brand is active (Active là String)
   const isActive = brand.Active === "true";  // NOT: if (brand.Active)
-  
-  // Check if schedule is active
-  const hasSchedule = brand.Active_Schedule === "true";  // NOT: if (brand.Active_Schedule)
+
+  // Check if schedule is active (Active_Schedule là Boolean thực)
+  const hasSchedule = brand.Active_Schedule;  // Boolean, dùng bình thường
   ```
 
 ⚠️ **READ-ONLY WARNING (Rule 1):**
@@ -1069,7 +1069,7 @@ Authorization: Bearer {TOKEN}
     "Dien_thoai": "0289876543",
     "Email": "quan1@example.com",
     "Active": "true",
-    "Active_Schedule": "true",
+    "Active_Schedule": true,
     "Ghi_chu": "Chi nhánh trung tâm",
     "createdAt": "2025-12-01T08:00:00.000Z",
     "updatedAt": "2026-02-15T10:30:00.000Z"
@@ -4882,7 +4882,8 @@ curl -X GET http://localhost:5000/api/dev/accounts
 - Trả về 403 nếu production environment
 - Dùng cho Account Switcher UI (dev testing)
 - Grouped by role để dễ chọn
-- Limit 5 accounts per role
+- ✅ **UPDATED 21/03/2026:** Bỏ limit — trả về **toàn bộ** nhân viên đang hoạt động (không còn giới hạn 50)
+- Frontend (`account-switcher.js`) lọc danh sách **client-side** theo tên / chức vụ / chi nhánh khi user gõ vào ô tìm kiếm
 
 ⚠️ **SECURITY WARNING:**
 - **TUYỆT ĐỐI** disable trong production

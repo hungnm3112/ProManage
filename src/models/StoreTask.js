@@ -18,31 +18,26 @@ const storeTaskSchema = new mongoose.Schema({
     ref: 'Brand',
     required: [true, 'Store ID is required']
   },
+  // Người phụ trách (nhân viên đầu tiên được Admin chọn)
+  // Vừa làm vừa quản lý — có quyền phân công checklist item và review kết quả
+  assignedPersonId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Employee',
+    default: null
+  },
+  // Giữ managerId (không required) để tương thích data cũ nếu có
   managerId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Employee',
-    required: [true, 'Manager ID is required']
+    default: null
   },
   status: {
     type: String,
     enum: {
-      values: ['pending', 'accepted', 'rejected', 'in_progress', 'completed'],
+      values: ['assigned', 'in_progress', 'completed'],
       message: '{VALUE} is not a valid status'
     },
-    default: 'pending'
-  },
-  acceptedAt: {
-    type: Date
-  },
-  rejectedAt: {
-    type: Date
-  },
-  rejectedReason: {
-    type: String,
-    trim: true,
-    required: function() {
-      return this.status === 'rejected';
-    }
+    default: 'assigned'
   },
   assignedEmployees: [{
     type: mongoose.Schema.Types.ObjectId,
@@ -59,7 +54,29 @@ const storeTaskSchema = new mongoose.Schema({
   },
   startedAt: {
     type: Date
-  }
+  },
+  messages: [
+    {
+      senderId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Employee',
+        required: true
+      },
+      senderName: {
+        type: String,
+        required: true
+      },
+      text: {
+        type: String,
+        required: true,
+        maxlength: 1000
+      },
+      createdAt: {
+        type: Date,
+        default: Date.now
+      }
+    }
+  ]
 }, {
   timestamps: true,
   collection: 'store_tasks'
@@ -69,7 +86,7 @@ const storeTaskSchema = new mongoose.Schema({
 storeTaskSchema.index({ broadcastId: 1, storeId: 1 }, { unique: true });
 
 // Other indexes for performance
-storeTaskSchema.index({ managerId: 1, status: 1 });
+storeTaskSchema.index({ assignedPersonId: 1, status: 1 });
 storeTaskSchema.index({ storeId: 1, status: 1 });
 storeTaskSchema.index({ status: 1, createdAt: -1 });
 
@@ -96,10 +113,10 @@ storeTaskSchema.virtual('store', {
   justOne: true
 });
 
-// Virtual: Populate manager details
-storeTaskSchema.virtual('manager', {
+// Virtual: Populate assignedPerson details
+storeTaskSchema.virtual('assignedPerson', {
   ref: 'Employee',
-  localField: 'managerId',
+  localField: 'assignedPersonId',
   foreignField: '_id',
   justOne: true
 });
@@ -108,29 +125,7 @@ storeTaskSchema.virtual('manager', {
 storeTaskSchema.set('toJSON', { virtuals: true });
 storeTaskSchema.set('toObject', { virtuals: true });
 
-// Method: Check if manager can accept
-storeTaskSchema.methods.canAccept = function() {
-  if (this.status !== 'pending') {
-    return {
-      canAccept: false,
-      reason: 'Only pending tasks can be accepted'
-    };
-  }
-  
-  return { canAccept: true };
-};
 
-// Method: Check if manager can reject
-storeTaskSchema.methods.canReject = function() {
-  if (this.status !== 'pending') {
-    return {
-      canReject: false,
-      reason: 'Only pending tasks can be rejected'
-    };
-  }
-  
-  return { canReject: true };
-};
 
 // Method: Check if task is overdue
 storeTaskSchema.methods.isOverdue = async function() {
@@ -148,21 +143,24 @@ storeTaskSchema.methods.isOverdue = async function() {
   return broadcast.deadline < new Date();
 };
 
-// Method: Calculate completion rate from user_tasks
+// Method: Calculate completion rate từ checklist items của UserTask duy nhất
+// Tính theo % required items đã isCompleted=true
 storeTaskSchema.methods.calculateCompletionRate = async function() {
   const UserTask = mongoose.model('UserTask');
   
-  const userTasks = await UserTask.find({ storeTaskId: this._id });
+  const userTask = await UserTask.findOne({ storeTaskId: this._id });
   
-  if (userTasks.length === 0) {
+  if (!userTask || !userTask.checklist || userTask.checklist.length === 0) {
     return 0;
   }
   
-  const completedTasks = userTasks.filter(task => 
-    task.status === 'approved'
-  ).length;
+  const requiredItems = userTask.checklist.filter(item => item.required);
+  if (requiredItems.length === 0) {
+    return 100;
+  }
   
-  return Math.round((completedTasks / userTasks.length) * 100);
+  const completedRequired = requiredItems.filter(item => item.isCompleted).length;
+  return Math.round((completedRequired / requiredItems.length) * 100);
 };
 
 // Method: Update completion rate
@@ -180,42 +178,45 @@ storeTaskSchema.methods.updateCompletionRate = async function() {
   return rate;
 };
 
-// Method: Get statistics
+// Method: Get statistics từ UserTask duy nhất
 storeTaskSchema.methods.getStats = async function() {
   const UserTask = mongoose.model('UserTask');
   
-  const userTasks = await UserTask.find({ storeTaskId: this._id });
+  const userTask = await UserTask.findOne({ storeTaskId: this._id });
   
-  const stats = {
-    total: userTasks.length,
-    assigned: 0,
-    in_progress: 0,
-    submitted: 0,
-    approved: 0,
-    rejected: 0,
-    completionRate: this.completionRate || 0
+  if (!userTask) {
+    return {
+      totalItems: 0,
+      completedItems: 0,
+      requiredItems: 0,
+      completedRequiredItems: 0,
+      assignedItems: 0,
+      completionRate: 0,
+      status: this.status
+    };
+  }
+  
+  const checklist = userTask.checklist || [];
+  const totalItems = checklist.length;
+  const completedItems = checklist.filter(i => i.isCompleted).length;
+  const requiredItems = checklist.filter(i => i.required).length;
+  const completedRequiredItems = checklist.filter(i => i.required && i.isCompleted).length;
+  const assignedItems = checklist.filter(i => i.assignedTo).length;
+  
+  return {
+    totalItems,
+    completedItems,
+    requiredItems,
+    completedRequiredItems,
+    assignedItems,
+    completionRate: this.completionRate || 0,
+    status: this.status
   };
-  
-  userTasks.forEach(task => {
-    if (stats[task.status] !== undefined) {
-      stats[task.status]++;
-    }
-  });
-  
-  return stats;
 };
 
-// Pre-save middleware: Set acceptedAt when status changes to accepted
+// Pre-save middleware: Set timestamps khi status thay đổi
 storeTaskSchema.pre('save', function(next) {
   if (this.isModified('status')) {
-    if (this.status === 'accepted' && !this.acceptedAt) {
-      this.acceptedAt = new Date();
-    }
-    
-    if (this.status === 'rejected' && !this.rejectedAt) {
-      this.rejectedAt = new Date();
-    }
-    
     if (this.status === 'in_progress' && !this.startedAt) {
       this.startedAt = new Date();
     }
@@ -223,14 +224,6 @@ storeTaskSchema.pre('save', function(next) {
     if (this.status === 'completed' && !this.completedAt) {
       this.completedAt = new Date();
     }
-  }
-  next();
-});
-
-// Pre-save middleware: Validate rejectedReason when status is rejected
-storeTaskSchema.pre('save', function(next) {
-  if (this.status === 'rejected' && !this.rejectedReason) {
-    return next(new Error('Rejected reason is required when rejecting a task'));
   }
   next();
 });

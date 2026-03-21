@@ -28,10 +28,8 @@ exports.getEmployees = async (req, res, next) => {
     // Build query
     const query = {};
 
-    // Filter by status
-    if (status) {
-      query.Status = status;
-    }
+    // Filter by status — mặc định chỉ lấy nhân viên đang hoạt động
+    query.Status = status || 'Đang hoạt động';
 
     // Filter by branch (for managers - only see their branch)
     if (req.user.role === 'manager') {

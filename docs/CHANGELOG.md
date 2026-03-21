@@ -15,14 +15,86 @@ và project tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 - Rate limiting cho API
 - JWT refresh token mechanism
 - Swagger API documentation
-- Console.log cleanup
-- DevTools security fix (disable in production)
 
 ---
+
+## [3.0.0] - 2026-03-xx
+
+### 🚀 Major Refactor — Task Assignment v3.0
+
+**Mục tiêu:** Đơn giản hóa luồng giao việc — bỏ Manager accept/reject, Admin giao thẳng cho nhân viên, người phụ trách điều phối checklist.
+
+#### Thay đổi kiến trúc chính
+
+- **Bỏ Manager accept/reject flow** — StoreTask không còn status `pending`/`accepted`/`rejected`, chỉ còn `in_progress` / `completed`
+- **1 UserTask per StoreTask** — chỉ người phụ trách (assignedPerson) có UserTask; người phụ trách vừa làm vừa quản lý
+- **Checklist delegation** — người phụ trách phân công từng checklist item cho đồng nghiệp qua `PUT /user-tasks/:id/assign-item`
+- **Checklist review** — người phụ trách duyệt từng item khi đồng nghiệp hoàn thành qua `PUT /user-tasks/:id/review-item`
+- **Admin clone broadcast** — thêm nút "Nhân bản" trên dashboard để sao chép metadata broadcast
+
+#### Models (`src/models/`)
+
+**StoreTask.js:**
+- `managerId: required` → `assignedPersonId: optional` (admin chỉ định người phụ trách)
+- Status enum: `['pending','accepted','rejected','in_progress','completed']` → `['in_progress','completed']`
+- Bỏ các field: `acceptedAt`, `rejectedAt`, `rejectedReason`
+- Bỏ methods: `canAccept()`, `canReject()`
+- `calculateCompletionRate()` — đếm required checklist items thay vì đếm UserTask
+- Virtual: `manager` → `assignedPerson`
+
+**UserTask.js:**
+- Bổ sung vào mỗi checklist item: `assignedTo`, `reviewStatus`, `reviewedAt`, `reviewedBy`, `reviewNote`
+- Thêm index multikey: `{ 'checklist.assignedTo': 1 }`
+
+**Broadcast.js:**
+- Thêm field `sourceId: ObjectId` — trỏ về broadcast gốc khi clone
+
+#### Controllers & Routes
+
+**storeTaskController.js:**
+- Xóa `acceptStoreTask()` và `rejectStoreTask()`
+- `assignEmployees()` — giờ là admin-only, tạo 1 UserTask duy nhất cho employee[0] (= assignedPerson), set status `in_progress` ngay
+
+**userTaskController.js:**
+- Thêm `assignChecklistItem()` — người phụ trách gán checklist item cho đồng nghiệp
+- Thêm `reviewChecklistItem()` — người phụ trách duyệt/từ chối item
+
+**adminController.js:**
+- Xóa `reassignUserTask()` và `addEmployeeToStoreTask()`
+- Thêm `getCloneData()` — lấy metadata broadcast để pre-fill form tạo mới
+
+**Routes removed:**
+- `PUT /api/store-tasks/:id/accept`
+- `PUT /api/store-tasks/:id/reject`
+- `PUT /api/admin/user-tasks/:id` (reassign)
+- `POST /api/admin/store-tasks/:id/add-employee`
+
+**Routes added:**
+- `PUT /api/user-tasks/:id/assign-item`
+- `PUT /api/user-tasks/:id/review-item`
+- `GET /api/admin/broadcasts/:id/clone-data`
+
+#### Frontend (`public/js/admin-dashboard.js`)
+- Bỏ KPI card `pendingConfirmTasks`
+- Bỏ tab/filter `pending-confirm`
+- `renderStoreTaskRow()` — hiển thị `assignedPersonName` thay `managerName`
+- `renderUserTaskRow()` — hiển thị người phụ trách với badge 👑; bỏ nút "Sửa"
+- Thêm nút "Nhân bản" trên mỗi broadcast group
+- `renderStoreEmployees()` — employee đầu tiên được chọn hiển thị badge 👑 Phụ trách
+- Thêm function `handleCloneBroadcast()` — gọi clone-data API và pre-fill form tạo broadcast
+
+#### Dashboard (`src/controllers/dashboardController.js`)
+- `getAdminDashboard()` — bỏ `pendingConfirmTasks`, overdue filter chỉ dùng `in_progress`
+- `getAdminTasksByStatus()` — bỏ `pending-confirm` case; `managerId` → `assignedPersonId` populate; response mới: 1 UserTask per StoreTask, trả về `assignedPersonName`, `checklistAssigned`
+
+
 
 ## [2.2.0] - 2026-03-21
 
 ### 🐛 Bug Fixes
+
+#### Brand Controller (`src/controllers/brandController.js`)
+- **Fix:** `Active_Schedule` trong MongoDB lưu kiểu **Boolean thực** (true/false), KHÔNG phải String "true"/"false" như Mongoose schema khai báo. Hệ quả: Mongoose tự cast query `true` → `'true'` (string) theo schema → không match Boolean trong DB → 0 chi nhánh trả về. Sửa 3 nơi: (1) `src/models/Brand.js` — đổi `Active_Schedule: String` → `Boolean`; (2) `src/controllers/brandController.js` — giữ `filter.Active_Schedule = true`; (3) docs `02-DATABASE-SCHEMA.md`, `03-API-REFERENCE.md` — cập nhật kiểu dữ liệu đúng.
 
 #### Admin Controller (`src/controllers/adminController.js`)
 - **Fix:** `notificationService.createNotification` được gọi sai — object `{}` được truyền làm tham số đầu tiên thay vì positional args. Hàm có signature `(userId, type, title, message, data)`. Sửa ở 3 vị trí: notify new employee (reassign), notify old employee (reassign), notify employee (delete/cancel).
@@ -39,6 +111,12 @@ và project tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 - **Fix:** `errorModal` (z-50) bị che khuất bởi `editTaskDetailsModal` (z-50) vì modal edit được khai báo sau trong DOM, nên stacking order cao hơn ở cùng z-index. Đổi `errorModal` sang `z-[60]`.
 
 ### ✨ Enhancements
+
+#### Admin Dashboard — Quản lý nhân viên trong task (`public/js/admin-dashboard.js`, `src/controllers/dashboardController.js`, `src/controllers/adminController.js`, `src/routes/adminRoutes.js`)
+- **Feature:** Level 3 accordion hiện thị `Tên · Chức vụ` (dòng 1) và `SĐT · done/required/total checklist` (dòng 2). Backend trả thêm `employeePosition` (từ ID_GroupUser) và `checklistRequired` (số item bắt buộc).
+- **Feature:** Edit modal hiển thị TẤT CẢ nhân viên được giao (không chỉ 1), mỗi người có nút X để xóa ngay lập tức (DELETE UserTask).
+- **Feature:** Endpoint mới `POST /api/admin/store-tasks/:id/add-employee` cho phép admin thêm nhân viên vào StoreTask đã tồn tại mà không ảnh hưởng nhân viên cũ. Edit modal dùng endpoint này thay vì reassign.
+- **Fix:** Edit modal trước đây thực hiện reassign (thay thế nhân viên cũ bằng mới) khi user muốn thêm nhân viên thứ 2 → chỉ còn 1 người. Nay đã tách riêng "thêm" và "reassign".
 
 #### Admin Dashboard Accordion 3 tầng (`public/js/admin-dashboard.js`, `src/controllers/dashboardController.js`)
 - **Backend:** Đổi `UserTask.findOne` → `UserTask.find` trong `getAdminTasksByStatus` để lấy TẤT CẢ nhân viên của mỗi StoreTask. Response thêm `broadcastId`, `userTasks[]` (mảng UserTask với status, checklist progress), `employeeCount`.

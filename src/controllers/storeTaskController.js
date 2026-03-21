@@ -59,7 +59,7 @@ const getStoreTasks = async (req, res) => {
     const storeTasks = await StoreTask.find(filter)
       .populate('broadcastId', 'title description priority deadline status')
       .populate('storeId', 'Name Map_Address Phone')
-      .populate('managerId', 'FullName Phone Email')
+      .populate('assignedPersonId', 'FullName Phone')
       .populate('assignedEmployees', 'FullName Phone')
       .select('-__v')
       .sort({ createdAt: -1 })
@@ -104,15 +104,15 @@ const getStoreTaskById = async (req, res) => {
     const storeTask = await StoreTask.findById(id)
       .populate('broadcastId')
       .populate('storeId', 'Name Map_Address Phone')
-      .populate('managerId', 'FullName Phone Email')
-      .populate('assignedEmployees', 'FullName Phone Email')
+      .populate('assignedPersonId', 'FullName Phone')
+      .populate('assignedEmployees', 'FullName Phone')
       .select('-__v');
     
     if (!storeTask) {
       return sendError(res, 'Store task not found', 404);
     }
     
-    // Manager can only view their own store's tasks
+    // Manager/assignedPerson can only view their own store's tasks
     if (currentUserRole === 'manager') {
       if (storeTask.storeId._id.toString() !== currentUser.ID_Branch.toString()) {
         return sendError(res, 'You can only view tasks of your own store', 403);
@@ -137,119 +137,12 @@ const getStoreTaskById = async (req, res) => {
 };
 
 /**
- * @route   PUT /api/store-tasks/:id/accept
- * @desc    Accept a store task
- * @access  Private (manager only)
- * @note    Only manager of the store can accept
- */
-const acceptStoreTask = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const currentUser = req.user;
-    const currentUserRole = await getEmployeeRole(currentUser);
-    
-    // Find store task
-    const storeTask = await StoreTask.findById(id)
-      .populate('broadcastId', 'title deadline')
-      .populate('storeId', 'Name');
-    
-    if (!storeTask) {
-      return sendError(res, 'Store task not found', 404);
-    }
-    
-    // Verify this is the manager of the store
-    if (storeTask.managerId.toString() !== currentUser._id.toString()) {
-      return sendError(res, 'Only the assigned manager can accept this task', 403);
-    }
-    
-    // Check if can accept
-    const canAcceptResult = storeTask.canAccept();
-    if (!canAcceptResult.canAccept) {
-      return sendError(res, canAcceptResult.reason, 400);
-    }
-    
-    // Update status to accepted
-    storeTask.status = 'accepted';
-    storeTask.acceptedAt = new Date();
-    await storeTask.save();
-    
-    // Populate for response
-    await storeTask.populate([
-      { path: 'managerId', select: 'FullName Phone Email' },
-      { path: 'storeId', select: 'Name Map_Address Phone' }
-    ]);
-    
-    return sendSuccess(res, 'Store task accepted successfully', { storeTask });
-  } catch (error) {
-    console.error('acceptStoreTask error:', error);
-    return sendError(res, error.message, 500);
-  }
-};
-
-/**
- * @route   PUT /api/store-tasks/:id/reject
- * @desc    Reject a store task
- * @access  Private (manager only)
- * @body    {string} rejectedReason - Reason for rejection (required)
- * @note    Only manager of the store can reject
- */
-const rejectStoreTask = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { rejectedReason } = req.body;
-    const currentUser = req.user;
-    const currentUserRole = await getEmployeeRole(currentUser);
-    
-    // Validate rejectedReason
-    if (!rejectedReason || rejectedReason.trim() === '') {
-      return sendError(res, 'Rejection reason is required', 400);
-    }
-    
-    // Find store task
-    const storeTask = await StoreTask.findById(id)
-      .populate('broadcastId', 'title deadline')
-      .populate('storeId', 'Name');
-    
-    if (!storeTask) {
-      return sendError(res, 'Store task not found', 404);
-    }
-    
-    // Verify this is the manager of the store
-    if (storeTask.managerId.toString() !== currentUser._id.toString()) {
-      return sendError(res, 'Only the assigned manager can reject this task', 403);
-    }
-    
-    // Check if can reject
-    const canRejectResult = storeTask.canReject();
-    if (!canRejectResult.canReject) {
-      return sendError(res, canRejectResult.reason, 400);
-    }
-    
-    // Update status to rejected
-    storeTask.status = 'rejected';
-    storeTask.rejectedReason = rejectedReason.trim();
-    storeTask.rejectedAt = new Date();
-    await storeTask.save();
-    
-    // Populate for response
-    await storeTask.populate([
-      { path: 'managerId', select: 'FullName Phone Email' },
-      { path: 'storeId', select: 'Name Map_Address Phone' }
-    ]);
-    
-    return sendSuccess(res, 'Store task rejected successfully', { storeTask });
-  } catch (error) {
-    console.error('rejectStoreTask error:', error);
-    return sendError(res, error.message, 500);
-  }
-};
-
-/**
  * @route   POST /api/store-tasks/:id/assign
- * @desc    Assign employees to a store task
- * @access  Private (manager only)
- * @body    {string[]} employeeIds - Array of employee IDs to assign
- * @note    Creates UserTask for each employee
+ * @desc    Assign employees to a store task (Admin only)
+ * @access  Private (admin only)
+ * @body    {string[]} employeeIds - Array of employee IDs; employee[0] = người phụ trách chính
+ * @note    TẤT CẢ employeeIds đều là người phụ trách — mỗi người nhận UserTask với checklist đầy đủ.
+ *          Không có khái niệm "worker" từ admin. Người phụ trách tự giao việc cho bất kỳ NV cùng chi nhánh.
  */
 const assignEmployees = async (req, res) => {
   try {
@@ -271,122 +164,190 @@ const assignEmployees = async (req, res) => {
       return sendError(res, 'Store task not found', 404);
     }
     
-    // Verify this is the manager of the store
-    if (storeTask.managerId.toString() !== currentUser._id.toString()) {
-      return sendError(res, 'Only the assigned manager can assign employees', 403);
+    // Validate: storeTask phải chưa có UserTask (chưa giao việc)
+    const existingUserTask = await UserTask.findOne({ storeTaskId: storeTask._id });
+    if (existingUserTask) {
+      return sendError(res, 'Chi nhánh này đã được giao việc rồi', 400);
     }
     
-    // Task must be accepted before assigning employees
-    if (storeTask.status !== 'accepted') {
-      return sendError(res, 'Store task must be accepted before assigning employees', 400);
-    }
-    
-    // Fetch all employees
-    const employees = await Employee.find({ _id: { $in: employeeIds } });
+    // Fetch all employees — phải đang hoạt động và cùng chi nhánh
+    const employees = await Employee.find({ _id: { $in: employeeIds }, Status: 'Đang hoạt động' });
     
     if (employees.length !== employeeIds.length) {
-      return sendError(res, 'One or more employee IDs are invalid', 400);
+      return sendError(res, 'Một hoặc nhiều employee ID không hợp lệ hoặc nhân viên không hoạt động', 400);
     }
     
-    // Validate all employees belong to the same branch
     const invalidEmployees = employees.filter(emp => 
       emp.ID_Branch.toString() !== storeTask.storeId._id.toString()
     );
-    
     if (invalidEmployees.length > 0) {
       return sendError(res, 
-        `Employees must belong to the same branch as the store task. Invalid: ${invalidEmployees.map(e => e.FullName).join(', ')}`, 
+        `Nhân viên phải thuộc chi nhánh này. Không hợp lệ: ${invalidEmployees.map(e => e.FullName).join(', ')}`, 
         400
       );
     }
     
-    // Check if employees are active
-    const inactiveEmployees = employees.filter(emp => emp.Status !== 'Đang hoạt động');
-    if (inactiveEmployees.length > 0) {
-      return sendError(res, 
-        `Cannot assign inactive employees: ${inactiveEmployees.map(e => e.FullName).join(', ')}`, 
-        400
-      );
+    // employee[0] = người phụ trách chính (primary contact)
+    // Sắp xếp employees theo thứ tự employeeIds để đảm bảo [0] đúng
+    const orderedEmployees = employeeIds.map(id => employees.find(e => e._id.toString() === id.toString())).filter(Boolean);
+    const assignedPerson = orderedEmployees[0];
+    if (!assignedPerson) {
+      return sendError(res, 'Người phụ trách chính (employee[0]) không hợp lệ', 400);
     }
     
-    // Create UserTask for each employee
-    const userTasks = [];
     const broadcast = storeTask.broadcastId;
     
-    for (const employee of employees) {
-      // Check if employee already assigned
-      const existingTask = await UserTask.findOne({
-        storeTaskId: storeTask._id,
-        employeeId: employee._id
-      });
-      
-      if (existingTask) {
-        continue; // Skip if already assigned
-      }
-      
-      // Copy checklist from broadcast
-      const checklist = broadcast.checklist.map(item => ({
-        task: item.task,
-        note: item.note || '',
-        required: item.required,
-        isCompleted: false
-      }));
-      
-      // Create UserTask
-      const userTask = await UserTask.create({
-        storeTaskId: storeTask._id,
-        broadcastId: broadcast._id,
-        employeeId: employee._id,
-        checklist: checklist,
-        evidences: [],
-        status: 'assigned'
-      });
-      
-      userTasks.push(userTask);
-    }
+    // Template checklist từ broadcast
+    const checklistTemplate = broadcast.checklist.map(item => ({
+      task: item.task,
+      note: item.note || '',
+      required: item.required,
+      isCompleted: false,
+      assignedTo: null,
+      reviewStatus: null
+    }));
     
-    // Update StoreTask assignedEmployees
-    const currentAssignedIds = storeTask.assignedEmployees.map(id => id.toString());
-    const newEmployeeIds = employeeIds.filter(id => !currentAssignedIds.includes(id));
-    
-    storeTask.assignedEmployees.push(...newEmployeeIds);
-    
-    // Update status to in_progress if not already
-    if (storeTask.status === 'accepted') {
-      storeTask.status = 'in_progress';
-      storeTask.startedAt = new Date();
-    }
-    
+    // Cập nhật StoreTask — TẤT CẢ đều là người phụ trách
+    storeTask.assignedPersonId = assignedPerson._id;
+    storeTask.assignedEmployees = orderedEmployees.map(e => e._id);
+    storeTask.status = 'assigned';
     await storeTask.save();
+
+    // Tạo UserTask cho TẤT CẢ người phụ trách — mỗi người có bản checklist đầy đủ riêng
+    const userTaskDocs = orderedEmployees.map(emp => ({
+      storeTaskId: storeTask._id,
+      broadcastId: broadcast._id,
+      employeeId: emp._id,
+      checklist: checklistTemplate.map(i => ({ ...i })),
+      evidences: [],
+      status: 'assigned'
+    }));
+    const createdUserTasks = await UserTask.insertMany(userTaskDocs);
+    const primaryUserTask = createdUserTasks[0];
     
-    // Send notifications to assigned employees
-    for (const userTask of userTasks) {
-      const employee = employees.find(emp => emp._id.toString() === userTask.employeeId.toString());
-      if (employee) {
-        await notificationService.notifyTaskAssigned(employee._id, userTask, broadcast);
-      }
+    // Thông báo cho người phụ trách chính
+    await notificationService.notifyTaskAssigned(assignedPerson._id, primaryUserTask, broadcast);
+
+    // Thông báo cho các đồng phụ trách còn lại
+    if (orderedEmployees.length > 1) {
+      await notificationService.sendToMultiple(
+        orderedEmployees.slice(1).map(e => e._id),
+        'task_assigned',
+        'Bạn được giao phụ trách công việc',
+        `"${broadcast.title}" — Đồng phụ trách với: ${assignedPerson.FullName}`,
+        { storeTaskId: storeTask._id, broadcastId: broadcast._id }
+      );
     }
-    
-    // Populate for response
+
     await storeTask.populate([
-      { path: 'assignedEmployees', select: 'FullName Phone Email' }
+      { path: 'assignedPersonId', select: 'FullName Phone' },
+      { path: 'assignedEmployees', select: 'FullName Phone' }
     ]);
     
-    return sendSuccess(res, 
-      `${userTasks.length} employee(s) assigned successfully`, 
-      { 
-        storeTask,
-        assignedCount: userTasks.length,
-        userTasks: userTasks.map(ut => ({
-          _id: ut._id,
-          employeeId: ut.employeeId,
-          status: ut.status,
-          checklistItems: ut.checklist.length
-        }))
-      }
-    );
+    return sendSuccess(res, 'Giao việc thành công', { 
+      storeTask,
+      userTasks: createdUserTasks.map(ut => ({
+        _id: ut._id,
+        employeeId: ut.employeeId,
+        status: ut.status,
+        checklistItems: ut.checklist.length
+      })),
+      assignedPerson: {
+        _id: assignedPerson._id,
+        name: assignedPerson.FullName
+      },
+      totalPersonsInCharge: orderedEmployees.length
+    });
   } catch (error) {
     console.error('assignEmployees error:', error);
+    return sendError(res, error.message, 500);
+  }
+};
+
+/**
+ * @route   GET /api/store-tasks/:id/messages
+ * @desc    Lấy tin nhắn của task (chỉ thành viên nhóm)
+ * @access  Private (admin, manager, employee)
+ */
+const getTaskMessages = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const currentUser = req.user;
+
+    const storeTask = await StoreTask.findById(id)
+      .select('assignedPersonId assignedEmployees messages');
+    if (!storeTask) {
+      return sendError(res, 'Không tìm thấy task', 404);
+    }
+
+    const isInTeam =
+      storeTask.assignedPersonId?.toString() === currentUser._id.toString() ||
+      storeTask.assignedEmployees.some(empId => empId.toString() === currentUser._id.toString());
+    if (!isInTeam) {
+      return sendError(res, 'Bạn không thuộc nhóm thực hiện task này', 403);
+    }
+
+    // 50 tin nhắn mới nhất, sắp xếp cũ → mới
+    const messages = (storeTask.messages || [])
+      .slice()
+      .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+      .slice(-50);
+
+    return sendSuccess(res, 'Messages fetched', { messages, total: storeTask.messages.length });
+  } catch (error) {
+    console.error('getTaskMessages error:', error);
+    return sendError(res, error.message, 500);
+  }
+};
+
+/**
+ * @route   POST /api/store-tasks/:id/messages
+ * @desc    Gửi tin nhắn trong task (chỉ thành viên nhóm)
+ * @access  Private (admin, manager, employee)
+ */
+const addTaskMessage = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { text } = req.body;
+    const currentUser = req.user;
+
+    if (!text || !text.trim()) {
+      return sendError(res, 'Nội dung tin nhắn không được để trống', 400);
+    }
+    if (text.trim().length > 1000) {
+      return sendError(res, 'Tin nhắn không được quá 1000 ký tự', 400);
+    }
+
+    const storeTask = await StoreTask.findById(id)
+      .select('assignedPersonId assignedEmployees');
+    if (!storeTask) {
+      return sendError(res, 'Không tìm thấy task', 404);
+    }
+
+    const isInTeam =
+      storeTask.assignedPersonId?.toString() === currentUser._id.toString() ||
+      storeTask.assignedEmployees.some(empId => empId.toString() === currentUser._id.toString());
+    if (!isInTeam) {
+      return sendError(res, 'Bạn không thuộc nhóm thực hiện task này', 403);
+    }
+
+    const messageData = {
+      senderId: currentUser._id,
+      senderName: currentUser.FullName,
+      text: text.trim(),
+      createdAt: new Date()
+    };
+
+    const updated = await StoreTask.findByIdAndUpdate(
+      id,
+      { $push: { messages: messageData } },
+      { new: true, select: 'messages' }
+    );
+    const newMessage = updated.messages[updated.messages.length - 1];
+
+    return sendSuccess(res, 'Tin nhắn đã được gửi', { message: newMessage });
+  } catch (error) {
+    console.error('addTaskMessage error:', error);
     return sendError(res, error.message, 500);
   }
 };
@@ -394,7 +355,7 @@ const assignEmployees = async (req, res) => {
 module.exports = {
   getStoreTasks,
   getStoreTaskById,
-  acceptStoreTask,
-  rejectStoreTask,
-  assignEmployees
+  assignEmployees,
+  getTaskMessages,
+  addTaskMessage
 };

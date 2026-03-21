@@ -22,15 +22,13 @@ const { sendSuccess, sendError } = require('../utils/responseHandler');
  */
 const getBrands = async (req, res) => {
   try {
-    const { active, search, page = 1, limit = 20 } = req.query;
+    const { search, page = 1, limit = 20 } = req.query;
     
     // Build filter
     const filter = {};
-    
-    // Filter by active status
-    if (active !== undefined) {
-      filter.Active = active;
-    }
+
+    // Chỉ lấy chi nhánh đang hoạt động (Active_Schedule: true - Boolean)
+    filter.Active_Schedule = true;
     
     // Search in name
     if (search) {

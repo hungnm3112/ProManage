@@ -78,4 +78,43 @@ router.post(
   userTaskController.submitTask
 );
 
+/**
+ * @route   POST /api/my-tasks/:id/confirm
+ * @desc    Người phụ trách xác nhận nhận việc → status: assigned → in_progress
+ * @access  Private (employee — chỉ người phụ trách)
+ * @note    Không có route từ chối
+ */
+router.post(
+  '/:id/confirm',
+  authenticate,
+  authorize('employee'),
+  userTaskController.confirmTask
+);
+
+/**
+ * @route   PUT /api/my-tasks/:id/assign-item
+ * @desc    Người phụ trách tag checklist item cho đồng nghiệp trong cùng StoreTask
+ * @access  Private (employee — chỉ người phụ trách)
+ * @body    { itemId, assignedToEmployeeId }
+ */
+router.put(
+  '/:id/assign-item',
+  authenticate,
+  authorize('employee'),
+  userTaskController.assignChecklistItem
+);
+
+/**
+ * @route   PUT /api/my-tasks/:id/review-item
+ * @desc    Người phụ trách approve/reject checklist item của nhân viên được tag
+ * @access  Private (employee — chỉ người phụ trách)
+ * @body    { itemId, action: 'approve'|'reject', reviewNote }
+ */
+router.put(
+  '/:id/review-item',
+  authenticate,
+  authorize('employee'),
+  userTaskController.reviewChecklistItem
+);
+
 module.exports = router;

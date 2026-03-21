@@ -69,7 +69,7 @@ async function loadDashboard(refreshTaskList = true) {
     document.getElementById('completedTasks').textContent = overview.completedTasks || 0;
     document.getElementById('overdueTasks').textContent = overview.overdueTasks || 0;
     document.getElementById('inProgressTasks').textContent = overview.inProgressTasks || 0;
-    document.getElementById('pendingConfirmTasks').textContent = overview.pendingConfirmTasks || 0;
+    document.getElementById('pendingConfirmTasks').textContent = overview.assignedTasks || 0;
 
     // Hide loading, show dashboard
     document.getElementById('loading').classList.add('hidden');
@@ -148,15 +148,18 @@ async function loadTaskList(status) {
   
   // Update title based on status
   const titles = {
-    'completed': '✅ Đã hoàn thành',
-    'overdue': '⚠️ Quá hạn',
-    'in-progress': '🔄 Đang làm',
-    'pending-confirm': '⏳ Chưa xác nhận'
+    'completed':       '✅ Đã hoàn thành',
+    'overdue':         '⚠️ Quá hạn',
+    'in-progress':     '🔄 Đang làm',
+    'pending-confirm': '⏳ Chưa xác nhận',
+    'assigned':        '⏳ Chưa xác nhận'
   };
   taskListTitle.textContent = titles[status] || 'Tasks cần ưu tiên';
   
   try {
-    const response = await fetch(`/api/dashboard/admin/tasks/${status}`, {
+    // 'pending-confirm' (KPI card data-status) maps to API status 'assigned'
+    const apiStatus = status === 'pending-confirm' ? 'assigned' : status;
+    const response = await fetch(`/api/dashboard/admin/tasks/${apiStatus}`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     
@@ -192,8 +195,6 @@ function calculateCompletionPercent(task) {
 
 function getTaskStatusBadge(status) {
   const badges = {
-    'pending': '<span class="px-2 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800">CHƯA NHẬN</span>',
-    'accepted': '<span class="px-2 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">ĐÃ NHẬN</span>',
     'in_progress': '<span class="px-2 py-1 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800">ĐANG LÀM</span>',
     'completed': '<span class="px-2 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">HOÀN THÀNH</span>',
     'overdue': '<span class="px-2 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800">QUÁ HẠN</span>'
@@ -231,8 +232,8 @@ function renderAccordionView(tasks) {
 
   return Object.entries(groups).map(([bId, group]) => {
     const totalStores    = group.storeTasks.length;
-    const totalEmployees = group.storeTasks.reduce((s, st) => s + (st.employeeCount || 0), 0);
     const storeTasksHtml = group.storeTasks.map(st => renderStoreTaskRow(st)).join('');
+    const broadcastId    = group.storeTasks[0]?.broadcastId;
 
     return `
     <div class="broadcast-group border border-gray-200 rounded-lg mb-3 overflow-hidden">
@@ -241,7 +242,7 @@ function renderAccordionView(tasks) {
         <div class="flex-1 min-w-0">
           <h4 class="font-semibold text-gray-900 truncate">${group.broadcastTitle || 'N/A'}</h4>
           <p class="text-xs text-gray-500 mt-0.5">
-            ${totalStores} chi nhánh &bull; ${totalEmployees} nhân viên &bull;
+            ${totalStores} chi nhánh &bull;
             Deadline: ${group.deadline ? new Date(group.deadline).toLocaleDateString('vi-VN') : 'N/A'}
           </p>
         </div>
@@ -249,6 +250,11 @@ function renderAccordionView(tasks) {
           <span class="px-2 py-1 rounded-full text-xs font-semibold ${getPriorityBadge(group.priority)}">
             ${translatePriority(group.priority).toUpperCase()}
           </span>
+          ${broadcastId ? `<button class="clone-broadcast-btn text-purple-600 hover:text-purple-800 text-xs font-semibold px-2 py-1 border border-purple-300 rounded"
+                  data-broadcast-id="${broadcastId}"
+                  title="Nhân bản công việc này">
+            <i class="fas fa-copy"></i> Nhân bản
+          </button>` : ''}
           <i class="fas fa-chevron-right text-gray-400 broadcast-chevron transition-transform duration-200"></i>
         </div>
       </div>
@@ -260,8 +266,7 @@ function renderAccordionView(tasks) {
 }
 
 function renderStoreTaskRow(st) {
-  const userTasksHtml = (st.userTasks || []).map(ut => renderUserTaskRow(ut, st)).join('');
-  const hasEmployees  = (st.userTasks || []).length > 0;
+  const hasEmployee = !!st.userTaskId;
 
   return `
   <div class="store-task-item border-b border-gray-100 last:border-0">
@@ -272,56 +277,49 @@ function renderStoreTaskRow(st) {
         <div class="min-w-0">
           <p class="font-medium text-sm text-gray-800 truncate">${st.storeName || 'N/A'}</p>
           <p class="text-xs text-gray-500">
-            Quản lý: ${st.managerName || 'N/A'} &bull;
-            ${st.employeeCount || 0} nhân viên &bull;
-            ${st.completionPercent || 0}%
+            Phụ trách: ${st.assignedPersonName || 'Chưa giao'} &bull;
+            ${st.assignedEmployeeCount || 0} NV &bull;
+            ${st.completionPercent || 0}% (${st.checklistDone || 0}/${st.checklistRequired || 0} mục bắt buộc)
           </p>
         </div>
       </div>
       <div class="flex gap-2 items-center ml-3 flex-shrink-0">
         ${getTaskStatusBadge(st.status)}
-        ${hasEmployees
+        ${hasEmployee
           ? `<i class="fas fa-chevron-right text-gray-400 store-chevron transition-transform duration-200"></i>`
-          : `<span class="text-xs text-amber-500 italic">Chưa có NV</span>`
+          : `<span class="text-xs text-amber-500 italic">Chưa giao</span>`
         }
       </div>
     </div>
-    ${hasEmployees ? `
+    ${hasEmployee ? `
     <div class="user-tasks-container hidden bg-white border-t border-gray-100">
-      ${userTasksHtml}
+      ${renderUserTaskRow(st)}
     </div>` : ''}
   </div>`;
 }
 
-function renderUserTaskRow(ut, st) {
-  const canEdit = st.status !== 'completed';
-  const progress = ut.checklistTotal > 0
-    ? `${ut.checklistDone}/${ut.checklistTotal} checklist`
+function renderUserTaskRow(st) {
+  const canDelete = st.status !== 'completed';
+  const checklistText = st.checklistTotal > 0
+    ? `${st.checklistDone}/${st.checklistRequired || st.checklistTotal} bắt buộc, ${st.checklistAssigned || 0} đã phân công`
     : 'Chưa có checklist';
 
   return `
-  <div class="user-task-row flex items-center justify-between px-6 py-3 border-b border-gray-50 last:border-0 hover:bg-gray-50">
-    <div class="flex items-center gap-3 flex-1 min-w-0">
+  <div class="user-task-row px-6 py-3 border-b border-gray-50 last:border-0 hover:bg-gray-50">
+    <div class="flex items-center gap-3 min-w-0">
       <i class="fas fa-user-circle text-gray-300 text-2xl flex-shrink-0"></i>
       <div class="min-w-0">
-        <p class="text-sm font-medium text-gray-800 truncate">${ut.employeeName}</p>
-        <p class="text-xs text-gray-500">
-          ${ut.employeePhone ? `${ut.employeePhone} &bull; ` : ''}${progress}
+        <p class="text-sm font-medium text-gray-800 truncate">
+          👑 ${st.assignedPersonName || 'Chưa giao'}
+          <span class="font-normal text-xs text-purple-600 ml-1">Người phụ trách</span>
         </p>
+        <p class="text-xs text-gray-500">${checklistText}</p>
       </div>
-      <span class="text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${getUserTaskStatusBadge(ut.status)}">
-        ${translateStatus(ut.status)}
-      </span>
     </div>
-    ${canEdit && ut.userTaskId ? `
-    <div class="flex gap-3 ml-3 flex-shrink-0">
-      <button class="edit-details-btn text-blue-600 hover:text-blue-800 text-xs font-medium"
-              data-task-id="${ut.userTaskId}"
-              title="Sửa hoặc giao lại">
-        <i class="fas fa-edit"></i> Sửa
-      </button>
+    ${canDelete && st.userTaskId ? `
+    <div class="flex gap-3 mt-2 pl-9">
       <button class="delete-task-btn text-red-500 hover:text-red-700 text-xs font-medium"
-              data-task-id="${ut.userTaskId}"
+              data-task-id="${st.userTaskId}"
               title="Xóa task">
         <i class="fas fa-trash"></i> Xóa
       </button>
@@ -332,12 +330,23 @@ function renderUserTaskRow(ut, st) {
 function attachAccordionListeners(tasks) {
   // Level 1: Broadcast → Stores
   document.querySelectorAll('.broadcast-header').forEach(header => {
-    header.addEventListener('click', () => {
+    header.addEventListener('click', (e) => {
+      // Don't toggle if clone button was clicked
+      if (e.target.closest('.clone-broadcast-btn')) return;
       const container = header.nextElementSibling;
       const chevron   = header.querySelector('.broadcast-chevron');
       const isHidden  = container.classList.contains('hidden');
       container.classList.toggle('hidden', !isHidden);
       chevron.classList.toggle('rotate-90', isHidden);
+    });
+  });
+
+  // Level 1: Clone broadcast button
+  document.querySelectorAll('.clone-broadcast-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const broadcastId = btn.getAttribute('data-broadcast-id');
+      await handleCloneBroadcast(broadcastId);
     });
   });
 
@@ -353,50 +362,14 @@ function attachAccordionListeners(tasks) {
     });
   });
 
-  // Level 3: Edit button
-  document.querySelectorAll('.edit-details-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const userTaskId = btn.getAttribute('data-task-id');
-      let storeTask = null;
-      let userTaskData = null;
-      for (const task of tasks) {
-        const found = (task.userTasks || []).find(ut => ut.userTaskId?.toString() === userTaskId);
-        if (found) { storeTask = task; userTaskData = found; break; }
-      }
-      if (!storeTask) { alert('Không tìm thấy task. Vui lòng refresh trang.'); return; }
-      // Build a task object compatible with openEditTaskDetailsModal
-      const taskForModal = {
-        ...storeTask,
-        userTaskId,
-        employeeId:     userTaskData.employeeId,
-        employeeName:   userTaskData.employeeName,
-        employeePhone:  userTaskData.employeePhone,
-        employeeBranch: userTaskData.employeeBranch
-      };
-      openEditTaskDetailsModal(taskForModal);
-    });
-  });
-
   // Level 3: Delete button
   document.querySelectorAll('.delete-task-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       const userTaskId = btn.getAttribute('data-task-id');
-      let storeTask = null;
-      let userTaskData = null;
-      for (const task of tasks) {
-        const found = (task.userTasks || []).find(ut => ut.userTaskId?.toString() === userTaskId);
-        if (found) { storeTask = task; userTaskData = found; break; }
-      }
+      const storeTask = tasks.find(t => t.userTaskId?.toString() === userTaskId);
       if (!storeTask) { alert('Không tìm thấy task. Vui lòng refresh trang.'); return; }
-      const taskForDelete = {
-        ...storeTask,
-        userTaskId,
-        employeeId:   userTaskData.employeeId,
-        employeeName: userTaskData.employeeName
-      };
-      handleDeleteTask(taskForDelete);
+      handleDeleteTask({ ...storeTask, userTaskId, employeeName: storeTask.assignedPersonName });
     });
   });
 }
@@ -1086,12 +1059,8 @@ function resetForm() {
   document.getElementById('dailyTime').value = '09:00';
   document.getElementById('weeklyDay').value = '6';
   document.getElementById('weeklyTime').value = '17:00';
-  document.getElementById('monthlyDay').value = '2';
-  document.getElementById('monthlyDay').disabled = false;
-  document.getElementById('monthlyLastDay').checked = false;
+  // monthlyDate and yearlyDate are date pickers — cleared by broadcastForm.reset()
   document.getElementById('monthlyTime').value = '10:00';
-  document.getElementById('yearlyMonth').value = '1';
-  document.getElementById('yearlyDay').value = '15';
   document.getElementById('yearlyTime').value = '17:00';
   
   // Show onetime settings by default
@@ -1128,8 +1097,7 @@ async function showTaskDetails(status) {
   const titles = {
     'completed': '✅ Công việc đã hoàn thành',
     'overdue': '⚠️ Công việc quá hạn',
-    'in-progress': '🔄 Công việc đang làm',
-    'pending-confirm': '⏳ Công việc chưa xác nhận'
+    'in-progress': '🔄 Công việc đang làm'
   };
   
   taskDetailsTitle.textContent = titles[status] || 'Chi tiết công việc';
@@ -1445,16 +1413,22 @@ function renderStoreEmployees(employees) {
     return;
   }
   
-  storeEmployeesList.innerHTML = employees.map(emp => `
+  storeEmployeesList.innerHTML = employees.map((emp, index) => {
+    const isSelected = selectedStoreEmployees.includes(emp._id);
+    // First selected employee = người phụ trách
+    const selectedIndex = selectedStoreEmployees.indexOf(emp._id);
+    const isPersonInCharge = isSelected && selectedIndex === 0;
+    return `
     <label class="flex items-center gap-4 p-4 bg-white border border-gray-200 rounded-lg hover:border-blue-400 hover:shadow-md transition-all cursor-pointer">
       <input type="checkbox" 
              class="store-employee-checkbox w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500 flex-shrink-0" 
              value="${emp._id}" 
-             ${selectedStoreEmployees.includes(emp._id) ? 'checked' : ''}>
+             ${isSelected ? 'checked' : ''}>
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2 mb-1">
           <i class="fas fa-user-circle text-blue-600"></i>
           <p class="font-semibold text-gray-900">${emp.FullName}</p>
+          ${isPersonInCharge ? '<span class="text-xs text-purple-600 font-bold px-1.5 py-0.5 bg-purple-50 rounded border border-purple-200">👑 Phụ trách</span>' : ''}
         </div>
         <div class="flex flex-col gap-1 text-sm text-gray-600">
           ${emp.Phone ? `<div class="flex items-center gap-2">
@@ -1468,7 +1442,15 @@ function renderStoreEmployees(employees) {
         </div>
       </div>
     </label>
-  `).join('');
+  `}).join('');
+  
+  // Show "first selected = phụ trách" hint
+  if (employees.length > 0) {
+    const hint = document.createElement('p');
+    hint.className = 'text-xs text-purple-600 mt-2 px-1';
+    hint.innerHTML = '👑 Nhân viên được chọn <strong>đầu tiên</strong> sẽ là <strong>người phụ trách</strong> — vừa làm vừa quản lý nhóm.';
+    storeEmployeesList.insertAdjacentElement('afterend', hint);
+  }
   
   // Update count
   storeEmployeesCount.textContent = selectedStoreEmployees.length;
@@ -1485,8 +1467,9 @@ function renderStoreEmployees(employees) {
         selectedStoreEmployees = selectedStoreEmployees.filter(id => id !== employeeId);
       }
       
-      // Update count
+      // Update count and re-render to refresh 👑 badge
       storeEmployeesCount.textContent = selectedStoreEmployees.length;
+      renderStoreEmployees(currentStoreEmployees);
     });
   });
 }
@@ -2121,6 +2104,7 @@ async function openEditTaskDetailsModal(task) {
   const taskId = task.userTaskId || task._id;
   document.getElementById('editTaskDetailsId').value = taskId;
   document.getElementById('editBroadcastId').value = task.broadcastId || '';
+  document.getElementById('editStoreTaskId').value = task._id || '';
   
   // Try broadcastTitle first, then fallback to title
   const title = task.broadcastTitle || task.title || '';
@@ -2221,15 +2205,8 @@ async function openEditTaskDetailsModal(task) {
     });
   });
   
-  // Populate current employee information
-  console.log('[populateCurrentEmployee] Task data:', {
-    employeeId: task.employeeId,
-    employeeName: task.employeeName,
-    employeePhone: task.employeePhone,
-    employeeBranch: task.employeeBranch,
-    userTaskId: task.userTaskId
-  });
-  populateCurrentEmployee(task);
+  // Populate all assigned employees
+  populateAssignedEmployees(task);
   
   // Initialize employee selector
   initializeEmployeeSelector();
@@ -2361,34 +2338,70 @@ function buildEditRecurringData(taskType) {
   return recurringData;
 }
 
-// ==================== POPULATE CURRENT EMPLOYEE ====================
-// Display current employee information in the edit modal
+// ==================== POPULATE ASSIGNED EMPLOYEES ====================
+// Display ALL assigned employees in the edit modal, each with X button to remove
 
-function populateCurrentEmployee(task) {
-  const currentEmployeeNameEl = document.getElementById('editCurrentEmployeeName');
-  const currentEmployeeInfoEl = document.getElementById('editCurrentEmployeeInfo');
-  
-  if (!task.employeeId || !task.employeeName || task.employeeName === 'Chưa giao') {
-    // Task not assigned to any employee yet
-    currentEmployeeNameEl.textContent = 'Chưa giao cho nhân viên';
-    currentEmployeeInfoEl.textContent = 'Task này chưa được giao cho ai';
-    currentEmployeeNameEl.classList.add('text-gray-500');
-  } else {
-    // Task is assigned to an employee
-    currentEmployeeNameEl.textContent = task.employeeName;
-    currentEmployeeNameEl.classList.remove('text-gray-500');
-    
-    // Build info string: Phone • Branch
-    const infoParts = [];
-    if (task.employeePhone) {
-      infoParts.push(`📞 ${task.employeePhone}`);
-    }
-    if (task.employeeBranch) {
-      infoParts.push(`🏪 ${task.employeeBranch}`);
-    }
-    
-    currentEmployeeInfoEl.textContent = infoParts.join(' • ') || 'Thông tin không đầy đủ';
+function populateAssignedEmployees(task) {
+  const container = document.getElementById('editCurrentEmployeeDisplay');
+  if (!container) return;
+
+  const userTasks = task.userTasks || [];
+
+  if (userTasks.length === 0) {
+    container.innerHTML = `<p class="text-sm text-gray-400 italic">Chưa giao cho nhân viên nào</p>`;
+    return;
   }
+
+  container.innerHTML = userTasks.map(ut => `
+    <div class="flex items-center gap-3 p-3 bg-blue-50 border border-blue-200 rounded-lg" id="emp-card-${ut.userTaskId}">
+      <i class="fas fa-user-circle text-blue-500 text-xl flex-shrink-0"></i>
+      <div class="flex-1 min-w-0">
+        <p class="font-semibold text-gray-900 text-sm truncate">${ut.employeeName}</p>
+        <p class="text-xs text-gray-500 truncate">
+          ${ut.employeePhone ? `📞 ${ut.employeePhone}` : ''}${ut.employeePhone && ut.employeeBranch ? ' · ' : ''}${ut.employeeBranch ? `🏢 ${ut.employeeBranch}` : ''}
+        </p>
+      </div>
+      <button class="remove-assigned-emp-btn flex-shrink-0 text-red-400 hover:text-red-600 p-1 rounded"
+              data-user-task-id="${ut.userTaskId}"
+              data-employee-name="${ut.employeeName}"
+              title="Xóa khỏi task">
+        <i class="fas fa-times text-base"></i>
+      </button>
+    </div>
+  `).join('');
+
+  // Attach remove handlers
+  container.querySelectorAll('.remove-assigned-emp-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const userTaskId = btn.getAttribute('data-user-task-id');
+      const name = btn.getAttribute('data-employee-name');
+      if (!confirm(`Xóa ${name} khỏi task này?`)) return;
+
+      try {
+        const res = await fetch(`/api/admin/user-tasks/${userTaskId}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          document.getElementById(`emp-card-${userTaskId}`)?.remove();
+          // Cập nhật local state
+          if (currentEditingTask?.userTasks) {
+            currentEditingTask.userTasks = currentEditingTask.userTasks.filter(
+              ut => ut.userTaskId?.toString() !== userTaskId
+            );
+          }
+          if (container.children.length === 0) {
+            container.innerHTML = `<p class="text-sm text-gray-400 italic">Chưa giao cho nhân viên nào</p>`;
+          }
+        } else {
+          const err = await res.json();
+          alert(err.message || 'Không thể xóa nhân viên');
+        }
+      } catch (e) {
+        alert('Lỗi kết nối');
+      }
+    });
+  });
 }
 
 // ==================== EMPLOYEE SELECTOR FOR EDIT MODAL ====================
@@ -2715,10 +2728,28 @@ saveEditDetailsBtn.addEventListener('click', async () => {
     
     // Build recurring data
     const recurringData = buildEditRecurringData(taskType);
-    
-    // Get new employee ID if reassigning
+
+    // Get new employee ID to ADD (not reassign)
     const newEmployeeId = document.getElementById('editNewEmployeeId').value;
-    
+    const storeTaskId   = document.getElementById('editStoreTaskId').value;
+
+    // Step 1: Add new employee if selected (POST add-employee, không xóa nhân viên cũ)
+    if (newEmployeeId && storeTaskId) {
+      const addRes = await fetch(`/api/admin/store-tasks/${storeTaskId}/add-employee`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ employeeId: newEmployeeId })
+      });
+      if (!addRes.ok) {
+        const err = await addRes.json();
+        throw new Error(err.message || 'Không thể thêm nhân viên');
+      }
+    }
+
+    // Step 2: Update broadcast fields via PUT (NOT sending employeeId — add was handled above)
     const requestBody = {
       title,
       description,
@@ -2727,14 +2758,7 @@ saveEditDetailsBtn.addEventListener('click', async () => {
       deadline: deadline.toISOString(),
       recurring: recurringData
     };
-    
-    // Add employeeId if reassigning
-    if (newEmployeeId) {
-      requestBody.employeeId = newEmployeeId;
-    }
-    
-    // Use unified admin endpoint for UserTask updates (supports both edit and reassign)
-    // taskId already contains the correct userTaskId from editTaskDetailsId input field
+
     const response = await fetch(`/api/admin/user-tasks/${taskId}`, {
       method: 'PUT',
       headers: {
@@ -2743,15 +2767,13 @@ saveEditDetailsBtn.addEventListener('click', async () => {
       },
       body: JSON.stringify(requestBody)
     });
-    
+
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.message || 'Không thể cập nhật task');
     }
-    
-    const result = await response.json();
-    
-    const actionText = newEmployeeId ? 'cập nhật và giao lại' : 'cập nhật';
+
+    const actionText = newEmployeeId ? 'cập nhật và thêm nhân viên' : 'cập nhật';
     successMessage.textContent = `Đã ${actionText} công việc thành công!`;
     successModal.classList.remove('hidden');
     editTaskDetailsModal.classList.add('hidden');
@@ -3126,6 +3148,72 @@ confirmEditReassignBtn.addEventListener('click', async () => {
 */
 
 // ==================== DELETE TASK FUNCTION ====================
+
+async function handleCloneBroadcast(broadcastId) {
+  try {
+    const response = await fetch(`/api/admin/broadcasts/${broadcastId}/clone-data`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.message || 'Không thể lấy dữ liệu nhân bản');
+    }
+
+    const result = await response.json();
+    const data = result.data;
+
+    // Pre-fill create broadcast modal
+    resetForm();
+    document.getElementById('broadcastTitle').value = `[Bản sao] ${data.title || ''}`;
+    document.getElementById('broadcastDescription').value = data.description || '';
+    document.getElementById('broadcastPriority').value = data.priority || 'medium';
+
+    // Fill checklist
+    if (data.checklist && data.checklist.length > 0) {
+      checklistContainer.innerHTML = '';
+      data.checklist.forEach((item, index) => {
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'flex gap-2';
+
+        // Use DOM properties (not innerHTML) to safely set value — prevents HTML injection
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'checklist-item flex-1 px-3 sm:px-4 py-3 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-base min-h-[48px]';
+        input.value = item.task || item;
+        input.required = true;
+
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = `remove-checklist-btn ${index === 0 ? 'hidden' : ''} bg-red-500 hover:bg-red-600 text-white px-3 rounded-lg min-w-[48px] min-h-[48px]`;
+        removeBtn.innerHTML = `<svg class="w-5 h-5 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>`;
+        removeBtn.addEventListener('click', () => {
+          itemDiv.remove();
+          updateRemoveButtons();
+        });
+
+        itemDiv.appendChild(input);
+        itemDiv.appendChild(removeBtn);
+        checklistContainer.appendChild(itemDiv);
+      });
+      updateRemoveButtons();
+    }
+
+    // Open modal and focus title so Backspace/keyboard goes to the right field,
+    // preventing browser "go back" navigation when no modal input has focus
+    createBroadcastModal.classList.remove('hidden');
+    setTimeout(() => {
+      const titleInput = document.getElementById('broadcastTitle');
+      titleInput.focus();
+      titleInput.setSelectionRange(titleInput.value.length, titleInput.value.length);
+    }, 50);
+
+  } catch (error) {
+    console.error('[handleCloneBroadcast] Error:', error);
+    errorMessage.textContent = error.message;
+    errorModal.classList.remove('hidden');
+  }
+}
 
 async function handleDeleteTask(task) {
   // Get userTaskId (from dashboard API) or fallback to _id

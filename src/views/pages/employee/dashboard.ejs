@@ -42,17 +42,18 @@
   <div id="dashboard" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 hidden">
     <h2 class="text-3xl font-bold text-gray-900 mb-6">Dashboard Nhân Viên</h2>
     
+    <!-- KPI Cards -->
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
       <div class="bg-white p-6 rounded-lg shadow">
         <h3 class="text-gray-500 text-sm font-medium">Công việc của Tôi</h3>
         <p id="myTasks" class="text-3xl font-bold text-blue-600 mt-2">0</p>
       </div>
       <div class="bg-white p-6 rounded-lg shadow">
-        <h3 class="text-gray-500 text-sm font-medium">Công việc Hoàn thành</h3>
+        <h3 class="text-gray-500 text-sm font-medium">Hoàn thành tháng này</h3>
         <p id="completedTasks" class="text-3xl font-bold text-green-600 mt-2">0</p>
       </div>
       <div class="bg-white p-6 rounded-lg shadow">
-        <h3 class="text-gray-500 text-sm font-medium">Công việc Chờ xử lý</h3>
+        <h3 class="text-gray-500 text-sm font-medium">Đang thực hiện</h3>
         <p id="pendingTasks" class="text-3xl font-bold text-orange-600 mt-2">0</p>
       </div>
       <div class="bg-white p-6 rounded-lg shadow">
@@ -61,15 +62,97 @@
       </div>
     </div>
 
-    <div class="bg-white rounded-lg shadow p-6">
-      <h3 class="text-xl font-bold mb-4">Tính năng đang phát triển...</h3>
-      <p class="text-gray-600">Các tính năng employee sẽ được triển khai theo roadmap.</p>
-      <ul class="mt-4 space-y-2 text-gray-700">
-        <li>✅ Authentication hoàn tất</li>
-        <li>⏳ Xem Công việc của Tôi</li>
-        <li>⏳ Upload Chứng minh (Hình ảnh/Video)</li>
-        <li>⏳ Xem Đánh giá</li>
-      </ul>
+    <!-- Section 1: Việc tôi phụ trách -->
+    <section id="responsibleTasksSection" class="hidden mb-8">
+      <h3 class="text-xl font-bold text-gray-800 mb-4">
+        📋 Việc tôi phụ trách
+        <span id="responsibleCount" class="ml-2 inline-flex items-center justify-center w-6 h-6 text-xs font-bold text-white bg-purple-500 rounded-full"></span>
+      </h3>
+      <div id="responsibleTasksList" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+    </section>
+
+    <!-- Section 2: Việc của tôi -->
+    <section id="myTasksSection" class="hidden mb-8">
+      <h3 class="text-xl font-bold text-gray-800 mb-4">
+        👤 Việc của tôi
+        <span id="myTaskCount" class="ml-2 inline-flex items-center justify-center w-6 h-6 text-xs font-bold text-white bg-green-500 rounded-full"></span>
+      </h3>
+      <div id="myTasksList" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+    </section>
+
+    <!-- Empty state -->
+    <div id="emptyState" class="hidden bg-white rounded-lg shadow p-10 text-center">
+      <p class="text-4xl mb-3">🎉</p>
+      <p class="text-xl font-semibold text-gray-700">Không có công việc nào</p>
+      <p class="text-gray-500 mt-2">Bạn hiện chưa được giao công việc nào. Hãy chờ admin phân công!</p>
+    </div>
+  </div>
+
+  <!-- ─── Modal: Chi tiết công việc ────────────────────────────────────── -->
+  <div id="taskDetailModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+      <!-- Header -->
+      <div class="flex items-center justify-between p-5 border-b flex-shrink-0">
+        <h3 id="detailModalTitle" class="text-lg font-bold text-gray-900 truncate pr-4"></h3>
+        <button onclick="closeTaskDetail()" class="text-gray-400 hover:text-gray-600 flex-shrink-0">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <!-- Tab Nav -->
+      <div class="flex border-b flex-shrink-0">
+        <button id="tabDetail" onclick="switchModalTab('detail')"
+          class="px-6 py-3 text-sm font-medium border-b-2 border-purple-500 text-purple-600">
+          📋 Chi tiết
+        </button>
+        <button id="tabMessages" onclick="switchModalTab('messages')"
+          class="px-6 py-3 text-sm font-medium text-gray-500 hover:text-gray-700">
+          💬 Tin nhắn <span id="msgCount" class="ml-1 bg-gray-200 text-gray-700 text-xs px-1.5 py-0.5 rounded-full">0</span>
+        </button>
+      </div>
+
+      <!-- Body -->
+      <div class="flex-1 overflow-hidden flex flex-col">
+        <!-- Detail Tab -->
+        <div id="detailTabContent" class="flex-1 overflow-y-auto p-5">
+          <div id="taskDetailContent"><p class="text-gray-400">Đang tải...</p></div>
+        </div>
+
+        <!-- Messages Tab -->
+        <div id="messagesTabContent" class="hidden flex-1 flex flex-col">
+          <div id="messagesList" class="flex-1 overflow-y-auto p-4 space-y-3 min-h-0" style="max-height:420px"></div>
+          <div class="p-4 border-t flex gap-2 flex-shrink-0">
+            <input id="messageInput" type="text" placeholder="Nhập tin nhắn..."
+              class="flex-1 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-300"
+              maxlength="1000"
+              onkeydown="if(event.key==='Enter')sendMessage()">
+            <button onclick="sendMessage()"
+              class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium">Gửi</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer Actions -->
+      <div id="detailModalFooter" class="p-5 border-t flex gap-3 justify-end flex-shrink-0"></div>
+    </div>
+  </div>
+
+  <!-- ─── Modal: Phân công checklist item (trên nền taskDetailModal) ──── -->
+  <div id="assignItemModal" class="fixed inset-0 bg-black bg-opacity-60 hidden z-[60] flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[80vh] flex flex-col">
+      <div class="flex items-center justify-between p-5 border-b flex-shrink-0">
+        <h3 class="text-base font-bold text-gray-900">Chọn nhân viên thực hiện</h3>
+        <button onclick="closeAssignItemModal()" class="text-gray-400 hover:text-gray-600">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div id="assignEmployeeList" class="flex-1 overflow-y-auto p-4 space-y-2"></div>
+      <div class="p-4 border-t flex gap-3 justify-end flex-shrink-0">
+        <button onclick="closeAssignItemModal()"
+          class="px-4 py-2 border rounded-lg text-sm text-gray-700 hover:bg-gray-50">Hủy</button>
+        <button onclick="handleConfirmAssignItem()"
+          class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-semibold">Xác nhận giao</button>
+      </div>
     </div>
   </div>
 

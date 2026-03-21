@@ -7,6 +7,7 @@ class AccountSwitcher {
   constructor() {
     this.accounts = null;
     this.isOpen = false;
+    this.searchTimer = null;
     this.init();
   }
 
@@ -15,10 +16,10 @@ class AccountSwitcher {
     try {
       const employee = JSON.parse(localStorage.getItem('employee') || '{}');
       if (employee.role !== 'admin') {
-        return; // Not an admin, don't show button
+        return;
       }
     } catch (error) {
-      return; // Error parsing employee data, don't show button
+      return;
     }
 
     await this.loadAccounts();
@@ -55,8 +56,9 @@ class AccountSwitcher {
     modal.id = 'accountSwitcherModal';
     modal.className = 'fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center';
     modal.innerHTML = `
-      <div class="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[80vh] overflow-hidden">
-        <div class="bg-indigo-600 text-white p-4 flex justify-between items-center">
+      <div class="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[85vh] overflow-hidden flex flex-col">
+        <!-- Header -->
+        <div class="bg-indigo-600 text-white p-4 flex justify-between items-center flex-shrink-0">
           <h3 class="text-lg font-bold">🔄 Chuyển đổi tài khoản (Dev Tool)</h3>
           <button id="closeAccountSwitcher" class="text-white hover:text-gray-200">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -64,8 +66,15 @@ class AccountSwitcher {
             </svg>
           </button>
         </div>
-        <div class="p-4 overflow-y-auto max-h-[calc(80vh-60px)]">
-          <div id="accountsList"></div>
+        <!-- Search bar -->
+        <div class="p-3 border-b flex-shrink-0">
+          <input id="accountSwitcherSearch" type="text"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            placeholder="Tìm kiếm theo tên, chức vụ, chi nhánh...">
+        </div>
+        <!-- List -->
+        <div class="overflow-y-auto flex-1">
+          <div id="accountsList" class="p-3"></div>
         </div>
       </div>
     `;
@@ -78,65 +87,81 @@ class AccountSwitcher {
 
   renderAccounts() {
     if (!this.accounts) return;
+    this.renderAccountList(this.accounts);
+  }
 
+  renderAccountList(filtered) {
     const container = document.getElementById('accountsList');
-    
-    const html = `
-      <!-- Current Account -->
-      <div class="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-        <h4 class="font-semibold text-green-800 mb-2">✓ Current Account</h4>
-        <div id="currentAccount" class="text-sm text-gray-700"></div>
+    if (!container) return;
+
+    const currentEmployee = JSON.parse(localStorage.getItem('employee') || '{}');
+
+    let html = `
+      <div class="mb-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+        <p class="text-xs font-semibold text-green-700 mb-1">✓ Đang đăng nhập</p>
+        <p class="font-semibold text-gray-900">${currentEmployee.fullName || 'N/A'}</p>
+        <p class="text-xs text-gray-500">${currentEmployee.groupUser || ''} · ${currentEmployee.branchName || ''}</p>
       </div>
-
-      <!-- Admin Accounts -->
-      ${this.renderRoleSection('admin', '👑 Admin Accounts', 'purple')}
-
-      <!-- Manager Accounts -->
-      ${this.renderRoleSection('manager', '👔 Manager Accounts', 'blue')}
-
-      <!-- Employee Accounts -->
-      ${this.renderRoleSection('employee', '👤 Employee Accounts', 'green')}
     `;
 
-    container.innerHTML = html;
+    html += this.renderRoleSection('👑 Admin', filtered.admin || [], 'purple');
+    html += this.renderRoleSection('👔 Quản lý', filtered.manager || [], 'blue');
+    html += this.renderRoleSection('👤 Nhân viên', filtered.employee || [], 'green');
 
-    // Display current account
-    const currentEmployee = JSON.parse(localStorage.getItem('employee') || '{}');
-    document.getElementById('currentAccount').innerHTML = `
-      <p class="font-semibold">${currentEmployee.fullName || 'Not logged in'}</p>
-      <p class="text-xs text-gray-600">${currentEmployee.groupUser || ''} - ${currentEmployee.branchName || ''}</p>
-      <p class="text-xs text-gray-500">Role: ${currentEmployee.role || 'N/A'}</p>
+    const total = (filtered.admin?.length || 0) + (filtered.manager?.length || 0) + (filtered.employee?.length || 0);
+    if (total === 0) {
+      html += '<p class="text-center text-gray-400 py-6 text-sm">Không tìm thấy kết quả</p>';
+    }
+
+    container.innerHTML = html;
+  }
+
+  renderRoleSection(title, accounts, color) {
+    if (!accounts || accounts.length === 0) return '';
+
+    const headerColor = {
+      purple: 'text-purple-700',
+      blue:   'text-blue-700',
+      green:  'text-green-700'
+    }[color] || 'text-gray-700';
+
+    const items = accounts.map(acc => `
+      <button data-switch-id="${acc._id}"
+        class="w-full text-left flex items-center gap-3 p-3 border border-gray-100 rounded-lg hover:bg-indigo-50 hover:border-indigo-200 transition-colors">
+        <div class="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0 text-gray-500">
+          <i class="fas fa-user text-sm"></i>
+        </div>
+        <div class="flex-1 min-w-0">
+          <p class="font-semibold text-gray-900 truncate">${acc.fullName}</p>
+          <p class="text-xs text-gray-500 truncate">📞 ${acc.phone} · 💼 ${acc.position}</p>
+          <p class="text-xs text-gray-400 truncate">🏢 ${acc.branch}</p>
+        </div>
+      </button>
+    `).join('');
+
+    return `
+      <div class="mb-3">
+        <p class="text-xs font-bold ${headerColor} uppercase tracking-wide px-1 mb-2">
+          ${title} (${accounts.length})
+        </p>
+        <div class="space-y-1">${items}</div>
+      </div>
     `;
   }
 
-  renderRoleSection(role, title, color) {
-    const accounts = this.accounts[role] || [];
-    if (accounts.length === 0) return '';
-
-    const colorClasses = {
-      purple: 'bg-purple-50 border-purple-200 text-purple-800',
-      blue: 'bg-blue-50 border-blue-200 text-blue-800',
-      green: 'bg-green-50 border-green-200 text-green-800'
-    };
-
-    return `
-      <div class="mb-6">
-        <h4 class="font-semibold ${colorClasses[color]} p-2 rounded mb-2">${title} (${accounts.length})</h4>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-          ${accounts.map(acc => `
-            <button 
-              onclick="accountSwitcher.switchTo('${acc._id}')"
-              class="text-left p-3 border rounded hover:bg-gray-50 transition-colors"
-            >
-              <p class="font-semibold text-gray-900">${acc.fullName}</p>
-              <p class="text-xs text-gray-600">${acc.position}</p>
-              <p class="text-xs text-gray-500">${acc.branch}</p>
-              <p class="text-xs text-blue-600">📱 ${acc.phone}</p>
-            </button>
-          `).join('')}
-        </div>
-      </div>
-    `;
+  filterAndRender(query) {
+    if (!this.accounts) return;
+    const q = query.toLowerCase();
+    const filter = (list) => !q ? list : list.filter(acc =>
+      acc.fullName.toLowerCase().includes(q) ||
+      acc.position.toLowerCase().includes(q) ||
+      acc.branch.toLowerCase().includes(q)
+    );
+    this.renderAccountList({
+      admin:    filter(this.accounts.admin    || []),
+      manager:  filter(this.accounts.manager  || []),
+      employee: filter(this.accounts.employee || [])
+    });
   }
 
   attachEvents() {
@@ -163,12 +188,34 @@ class AccountSwitcher {
         this.close();
       }
     });
+
+    // Search input
+    const searchInput = document.getElementById('accountSwitcherSearch');
+    searchInput.addEventListener('input', () => {
+      if (this.searchTimer) clearTimeout(this.searchTimer);
+      this.searchTimer = setTimeout(() => {
+        this.filterAndRender(searchInput.value.trim());
+      }, 200);
+    });
+
+    // Account item clicks — event delegation to avoid inline onclick (CSP)
+    document.getElementById('accountsList').addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-switch-id]');
+      if (btn) {
+        this.switchTo(btn.getAttribute('data-switch-id'));
+      }
+    });
   }
 
   open() {
     document.getElementById('accountSwitcherModal').classList.remove('hidden');
     document.getElementById('accountSwitcherModal').classList.add('flex');
     this.isOpen = true;
+    const searchInput = document.getElementById('accountSwitcherSearch');
+    if (searchInput) {
+      searchInput.value = '';
+      this.filterAndRender('');
+    }
   }
 
   close() {
@@ -197,12 +244,17 @@ class AccountSwitcher {
         // Show success message
         const toast = document.createElement('div');
         toast.className = 'fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded shadow-lg z-50';
-        toast.innerHTML = `✓ Switched to ${data.employee.fullName}`;
+        toast.innerHTML = `✓ Switched to ${data.employee.fullName} — đang chuyển hướng...`;
         document.body.appendChild(toast);
 
-        // Reload page after delay
+        // Redirect to role-appropriate dashboard after delay
+        const dashboardUrls = {
+          admin:    '/admin/dashboard',
+          manager:  '/manager/dashboard',
+          employee: '/employee/dashboard'
+        };
         setTimeout(() => {
-          window.location.reload();
+          window.location.href = dashboardUrls[data.employee.role] || '/login';
         }, 500);
       } else {
         alert('Failed to switch account: ' + data.error);

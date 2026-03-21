@@ -155,6 +155,12 @@ const broadcastSchema = new mongoose.Schema({
     ref: 'Employee',
     required: [true, 'Creator is required']
   },
+  // Trỏ về broadcast gốc nếu đây là bản clone
+  sourceId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Broadcast',
+    default: null
+  },
   publishedAt: {
     type: Date
   },

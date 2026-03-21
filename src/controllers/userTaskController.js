@@ -8,6 +8,7 @@
 
 const UserTask = require('../models/UserTask');
 const StoreTask = require('../models/StoreTask');
+const Employee = require('../models/Employee');
 const { sendSuccess, sendError } = require('../utils/responseHandler');
 const notificationService = require('../services/notificationService');
 
@@ -100,32 +101,58 @@ const getTaskById = async (req, res) => {
       })
       .populate({
         path: 'storeTaskId',
-        select: 'status acceptedAt startedAt',
-        populate: {
-          path: 'storeId',
-          select: 'Name Map_Address Phone'
-        }
+        select: 'status acceptedAt startedAt assignedPersonId assignedEmployees storeId',
+        populate: [
+          { path: 'storeId', select: 'Name Map_Address Phone' },
+          { path: 'assignedEmployees', select: 'FullName Phone' }
+        ]
       })
       .populate({
         path: 'employeeId',
         select: 'FullName Phone Email'
       });
-    
+
     if (!userTask) {
       return sendError(res, 'Task not found', 404);
     }
-    
+
     // Verify this task belongs to the current employee
     if (userTask.employeeId._id.toString() !== currentUser._id.toString()) {
       return sendError(res, 'You can only view your own tasks', 403);
     }
-    
-    // Get stats
+
+    // Determine role: responsible person = in assignedEmployees
+    const storeTask = userTask.storeTaskId;
+    const assignedEmployees = storeTask?.assignedEmployees || [];
+    const isResponsible = assignedEmployees.some(emp => {
+      const empId = emp._id ? emp._id.toString() : emp.toString();
+      return empId === currentUser._id.toString();
+    });
+    const assignedPersonId = storeTask?.assignedPersonId;
+
+    let assignedItems = [];
+    if (!isResponsible && storeTask?._id) {
+      // External employee: look up items assigned to them across all responsible persons' UserTasks
+      const responsibleIds = assignedEmployees.map(e => e._id || e);
+      const responsibleUserTasks = await UserTask.find({
+        storeTaskId: storeTask._id,
+        employeeId: { $in: responsibleIds }
+      }).select('checklist');
+      for (const rt of responsibleUserTasks) {
+        const items = rt.checklist
+          .filter(item => item.assignedTo?.toString() === currentUser._id.toString())
+          .map(item => (item.toObject ? item.toObject() : JSON.parse(JSON.stringify(item))));
+        assignedItems.push(...items);
+      }
+    }
+
     const stats = userTask.getStats();
-    
+
     return sendSuccess(res, 'Task fetched successfully', {
       task: userTask,
-      stats
+      stats,
+      isResponsible,
+      assignedItems
     });
   } catch (error) {
     console.error('getTaskById error:', error);
@@ -318,7 +345,7 @@ const submitTask = async (req, res) => {
     }
     
     await userTask.save();
-    
+
     // Update store task status if needed
     const storeTask = await StoreTask.findById(userTask.storeTaskId)
       .populate('managerId', 'FullName');
@@ -327,7 +354,7 @@ const submitTask = async (req, res) => {
       storeTask.startedAt = new Date();
       await storeTask.save();
     }
-    
+
     // Notify manager about task submission
     if (storeTask && storeTask.managerId) {
       await notificationService.notifyTaskSubmitted(
@@ -336,7 +363,27 @@ const submitTask = async (req, res) => {
         currentUser
       );
     }
-    
+
+    // Worker submission: mark their assigned checklist items as done in assignedPerson's UserTask
+    if (storeTask && storeTask.assignedPersonId &&
+        storeTask.assignedPersonId.toString() !== currentUser._id.toString()) {
+      const assignedPersonTask = await UserTask.findOne({
+        storeTaskId: storeTask._id,
+        employeeId: storeTask.assignedPersonId
+      });
+      if (assignedPersonTask) {
+        let itemsMarked = false;
+        assignedPersonTask.checklist.forEach(item => {
+          if (item.assignedTo?.toString() === currentUser._id.toString() && !item.isCompleted) {
+            item.isCompleted = true;
+            item.completedAt = new Date();
+            itemsMarked = true;
+          }
+        });
+        if (itemsMarked) await assignedPersonTask.save();
+      }
+    }
+
     return sendSuccess(res, 'Task submitted successfully', {
       task: userTask,
       stats: userTask.getStats()
@@ -347,10 +394,263 @@ const submitTask = async (req, res) => {
   }
 };
 
+/**
+ * @route   PUT /api/my-tasks/:id/assign-item
+ * @desc    Người phụ trách giao checklist item cho nhân viên cùng chi nhánh (không giới hạn bởi danh sách admin chọn)
+ * @access  Private (employee — chỉ người phụ trách mới được gọi)
+ * @body    { itemId: String (ObjectId của checklist item), assignedToEmployeeId: String }
+ */
+const assignChecklistItem = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { itemId, assignedToEmployeeId } = req.body;
+    const currentUser = req.user;
+
+    if (!itemId || !assignedToEmployeeId) {
+      return sendError(res, 'itemId và assignedToEmployeeId là bắt buộc', 400);
+    }
+
+    const userTask = await UserTask.findById(id).populate({
+      path: 'storeTaskId',
+      select: 'storeId assignedEmployees'
+    });
+    if (!userTask) {
+      return sendError(res, 'Không tìm thấy UserTask', 404);
+    }
+
+    // Chỉ người phụ trách (UserTask.employeeId) mới được phân công
+    if (userTask.employeeId.toString() !== currentUser._id.toString()) {
+      return sendError(res, 'Chỉ người phụ trách mới có thể phân công checklist item', 403);
+    }
+
+    // Không được giao cho chính mình
+    if (assignedToEmployeeId === currentUser._id.toString()) {
+      return sendError(res, 'Không thể giao item cho chính mình', 400);
+    }
+
+    // Validate: nhân viên được giao phải cùng chi nhánh với task (KHÔNG phụ thuộc assignedEmployees)
+    const storeTask = userTask.storeTaskId;
+    const targetEmployee = await Employee.findById(assignedToEmployeeId).select('ID_Branch Status FullName');
+    if (!targetEmployee) {
+      return sendError(res, 'Nhân viên không tồn tại', 404);
+    }
+    if (targetEmployee.Status === 'Nghỉ việc') {
+      return sendError(res, 'Nhân viên này đã nghỉ việc', 400);
+    }
+    if (targetEmployee.ID_Branch.toString() !== storeTask.storeId.toString()) {
+      return sendError(res, 'Chỉ có thể giao việc cho nhân viên thuộc cùng chi nhánh', 400);
+    }
+
+    // Tìm checklist item theo _id
+    const checklistItem = userTask.checklist.id(itemId);
+    if (!checklistItem) {
+      return sendError(res, 'Không tìm thấy checklist item', 404);
+    }
+
+    if (checklistItem.isCompleted) {
+      return sendError(res, 'Không thể giao item đã hoàn thành', 400);
+    }
+
+    checklistItem.assignedTo = assignedToEmployeeId;
+    checklistItem.reviewStatus = null;
+    await userTask.save();
+
+    // Nếu nhân viên được giao chưa có UserTask cho StoreTask này → tạo UserTask rỗng cho visibility
+    const existingTargetTask = await UserTask.findOne({
+      storeTaskId: storeTask._id,
+      employeeId: assignedToEmployeeId
+    });
+    if (!existingTargetTask) {
+      await UserTask.create({
+        storeTaskId: storeTask._id,
+        broadcastId: userTask.broadcastId,
+        employeeId: assignedToEmployeeId,
+        checklist: [],
+        evidences: [],
+        status: 'assigned'
+      });
+    }
+
+    // Notify nhân viên được giao
+    try {
+      const Broadcast = require('../models/Broadcast');
+      const broadcast = await Broadcast.findById(userTask.broadcastId).select('title');
+      await notificationService.createNotification({
+        recipientId: assignedToEmployeeId,
+        type: 'checklist_item_assigned',
+        title: 'Được giao công việc mới',
+        message: `Bạn được giao thực hiện: "${checklistItem.task}" trong task "${broadcast?.title || ''}"`,
+        relatedId: userTask._id,
+        relatedModel: 'UserTask'
+      });
+    } catch (notifErr) {
+      console.error('assignChecklistItem notification error:', notifErr.message);
+    }
+
+    return sendSuccess(res, 'Phân công checklist item thành công', { 
+      checklistItem: {
+        _id: checklistItem._id,
+        task: checklistItem.task,
+        assignedTo: assignedToEmployeeId
+      }
+    });
+  } catch (error) {
+    console.error('assignChecklistItem error:', error);
+    return sendError(res, error.message, 500);
+  }
+};
+
+/**
+ * @route   PUT /api/my-tasks/:id/review-item
+ * @desc    Người phụ trách approve/reject checklist item của nhân viên được tag
+ * @access  Private (employee — chỉ người phụ trách mới được gọi)
+ * @body    { itemId: String, action: 'approve'|'reject', reviewNote: String }
+ */
+const reviewChecklistItem = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { itemId, action, reviewNote } = req.body;
+    const currentUser = req.user;
+
+    if (!itemId || !action || !['approve', 'reject'].includes(action)) {
+      return sendError(res, 'itemId và action (approve|reject) là bắt buộc', 400);
+    }
+
+    const userTask = await UserTask.findById(id).populate('storeTaskId');
+    if (!userTask) {
+      return sendError(res, 'Không tìm thấy UserTask', 404);
+    }
+
+    // Chỉ người phụ trách mới được review
+    if (userTask.employeeId.toString() !== currentUser._id.toString()) {
+      return sendError(res, 'Chỉ người phụ trách mới có thể review checklist item', 403);
+    }
+
+    const checklistItem = userTask.checklist.id(itemId);
+    if (!checklistItem) {
+      return sendError(res, 'Không tìm thấy checklist item', 404);
+    }
+
+    if (!checklistItem.assignedTo) {
+      return sendError(res, 'Item này chưa được giao cho ai', 400);
+    }
+
+    if (checklistItem.reviewStatus === 'approved') {
+      return sendError(res, 'Item này đã được phê duyệt rồi', 400);
+    }
+
+    // Cập nhật review
+    checklistItem.reviewStatus = action === 'approve' ? 'approved' : 'rejected';
+    checklistItem.reviewedAt = new Date();
+    checklistItem.reviewedBy = currentUser._id;
+    checklistItem.reviewNote = reviewNote || '';
+
+    if (action === 'approve') {
+      checklistItem.isCompleted = true;
+      checklistItem.completedAt = new Date();
+    }
+
+    await userTask.save();
+
+    // Cập nhật completion rate của StoreTask
+    const storeTask = userTask.storeTaskId;
+    await storeTask.updateCompletionRate();
+
+    // Notify nhân viên được review
+    try {
+      const Broadcast = require('../models/Broadcast');
+      const broadcast = await Broadcast.findById(userTask.broadcastId).select('title');
+      const actionText = action === 'approve' ? 'phê duyệt' : 'từ chối';
+      await notificationService.createNotification({
+        recipientId: checklistItem.assignedTo,
+        type: 'checklist_item_reviewed',
+        title: `Kết quả công việc: ${actionText === 'phê duyệt' ? '✅' : '❌'} ${actionText}`,
+        message: `"${checklistItem.task}" trong task "${broadcast?.title || ''}" đã được ${actionText}${reviewNote ? `: ${reviewNote}` : ''}`,
+        relatedId: userTask._id,
+        relatedModel: 'UserTask'
+      });
+    } catch (notifErr) {
+      console.error('reviewChecklistItem notification error:', notifErr.message);
+    }
+
+    return sendSuccess(res, `Checklist item đã được ${action === 'approve' ? 'phê duyệt' : 'từ chối'}`, {
+      checklistItem: {
+        _id: checklistItem._id,
+        task: checklistItem.task,
+        reviewStatus: checklistItem.reviewStatus,
+        isCompleted: checklistItem.isCompleted,
+        reviewNote: checklistItem.reviewNote
+      },
+      storeTaskCompletionRate: storeTask.completionRate,
+      storeTaskStatus: storeTask.status
+    });
+  } catch (error) {
+    console.error('reviewChecklistItem error:', error);
+    return sendError(res, error.message, 500);
+  }
+};
+
+/**
+ * @route   POST /api/my-tasks/:id/confirm
+ * @desc    Người phụ trách xác nhận nhận việc → chuyển sang in_progress
+ * @access  Private (employee — chỉ người phụ trách)
+ */
+const confirmTask = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const currentUserId = req.user._id;
+
+    const userTask = await UserTask.findById(id).populate('storeTaskId');
+    if (!userTask) {
+      return sendError(res, 'Task not found', 404);
+    }
+
+    // Chỉ có thể xác nhận task của chính mình
+    if (userTask.employeeId.toString() !== currentUserId.toString()) {
+      return sendError(res, 'Không thể xác nhận task của người khác', 403);
+    }
+
+    if (userTask.status !== 'assigned') {
+      return sendError(res, `Không thể xác nhận: task đang ở trạng thái "${userTask.status}"`, 400);
+    }
+
+    // Cập nhật UserTask
+    userTask.status = 'in_progress';
+    await userTask.save();
+
+    // Cập nhật StoreTask chỉ khi người xác nhận là người phụ trách
+    const storeTask = userTask.storeTaskId;
+    if (storeTask.assignedPersonId?.toString() === currentUserId.toString()) {
+      storeTask.status = 'in_progress';
+      storeTask.startedAt = new Date();
+      await storeTask.save();
+    }
+
+    console.log(`[confirmTask] Task ${id} confirmed by ${currentUserId}`);
+    return sendSuccess(res, 'Xác nhận nhận việc thành công', {
+      userTask: {
+        _id: userTask._id,
+        status: userTask.status
+      },
+      storeTask: {
+        _id: storeTask._id,
+        status: storeTask.status,
+        startedAt: storeTask.startedAt
+      }
+    });
+  } catch (error) {
+    console.error('confirmTask error:', error);
+    return sendError(res, error.message, 500);
+  }
+};
+
 module.exports = {
   getMyTasks,
   getTaskById,
   updateChecklist,
   uploadEvidence,
-  submitTask
+  submitTask,
+  assignChecklistItem,
+  reviewChecklistItem,
+  confirmTask
 };

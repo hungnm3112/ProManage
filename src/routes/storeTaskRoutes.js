@@ -42,45 +42,43 @@ router.get(
 );
 
 /**
- * @route   PUT /api/store-tasks/:id/accept
- * @desc    Accept a store task
- * @access  Private (manager only)
- * @note    Only manager of the store can accept
- */
-router.put(
-  '/:id/accept',
-  authenticate,
-  authorize('manager'),
-  storeTaskValidator.validateAcceptStoreTask,
-  storeTaskController.acceptStoreTask
-);
-
-/**
- * @route   PUT /api/store-tasks/:id/reject
- * @desc    Reject a store task
- * @access  Private (manager only)
- * @note    Only manager of the store can reject
- */
-router.put(
-  '/:id/reject',
-  authenticate,
-  authorize('manager'),
-  storeTaskValidator.validateRejectStoreTask,
-  storeTaskController.rejectStoreTask
-);
-
-/**
  * @route   POST /api/store-tasks/:id/assign
- * @desc    Assign employees to a store task
- * @access  Private (manager only)
- * @note    Creates UserTask for each employee
+ * @desc    Assign employees to a store task (Admin only)
+ * @access  Private (admin only)
+ * @body    { employeeIds: [...] } — employee[0] sẽ là người phụ trách
+ * @note    Tạo 1 UserTask cho người phụ trách (employee[0])
+ *          StoreTask.status chuyển sang in_progress ngay lập tức
  */
 router.post(
   '/:id/assign',
   authenticate,
-  authorize('manager'),
+  authorize('admin'),
   storeTaskValidator.validateAssignEmployees,
   storeTaskController.assignEmployees
+);
+
+/**
+ * @route   GET /api/store-tasks/:id/messages
+ * @desc    Lấy tin nhắn của task
+ * @access  Private (admin, manager, employee)
+ */
+router.get(
+  '/:id/messages',
+  authenticate,
+  authorize('admin', 'manager', 'employee'),
+  storeTaskController.getTaskMessages
+);
+
+/**
+ * @route   POST /api/store-tasks/:id/messages
+ * @desc    Gửi tin nhắn trong task
+ * @access  Private (admin, manager, employee)
+ */
+router.post(
+  '/:id/messages',
+  authenticate,
+  authorize('admin', 'manager', 'employee'),
+  storeTaskController.addTaskMessage
 );
 
 module.exports = router;

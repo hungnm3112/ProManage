@@ -130,7 +130,7 @@ async function cloneRecurringBroadcast(originalBroadcast, stores = null) {
       const storeTasks = assignedStores.map(storeId => ({
         broadcastId: newBroadcast._id,
         storeId: storeId,
-        status: 'pending',
+        status: 'assigned',
         deadline: nextDeadline
       }));
       

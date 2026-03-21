@@ -45,7 +45,7 @@ const brandSchema = new mongoose.Schema({
   Phone_Customer_Support: String,
   Phone_Feedback: String,
   Link_Description: String,
-  Active_Schedule: String,  // "true" | "false"
+  Active_Schedule: Boolean,  // true | false (Boolean thực trong DB)
   PercentPayment: String
 }, {
   timestamps: false,

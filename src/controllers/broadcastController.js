@@ -321,67 +321,14 @@ const publishBroadcast = async (req, res) => {
     broadcast.publishedAt = new Date();
     await broadcast.save();
     
-    // Create store tasks for each assigned store
-    const storeTasksPromises = broadcast.assignedStores.map(async (store) => {
-      // Find manager of this store
-      const manager = await Employee.findOne({
-        ID_Branch: store._id,
-        Status: 'Đang hoạt động'
-      }).populate('ID_GroupUser');
-      
-      // Check if manager exists and has manager role
-      if (!manager) {
-        console.warn(`No active manager found for store ${store.Name}`);
-        return null;
-      }
-      
-      const managerRole = await getEmployeeRole(manager);
-      if (managerRole !== 'manager') {
-        console.warn(`Employee ${manager.FullName} at store ${store.Name} is not a manager`);
-        return null;
-      }
-      
-      // Create store task
-      const storeTask = new StoreTask({
-        broadcastId: broadcast._id,
-        storeId: store._id,
-        managerId: manager._id,
-        status: 'pending'
-      });
-      
-      await storeTask.save();
-      
-      return storeTask;
-    });
-    
-    // Wait for all store tasks to be created
-    const storeTasks = await Promise.all(storeTasksPromises);
-    const createdStoreTasks = storeTasks.filter(task => task !== null);
-    
-    // Create notifications for managers
-    if (createdStoreTasks.length > 0) {
-      const managerIds = createdStoreTasks.map(task => task.managerId);
-      await notificationService.notifyBroadcastPublished(managerIds, broadcast);
-    }
-    
-    // Populate broadcast with store tasks
+    // StoreTasks are created later via assignBroadcast
+    // Populate broadcast
     await broadcast.populate([
       { path: 'createdBy', select: 'FullName Phone Email' },
-      { path: 'assignedStores', select: 'Name Map_Address Phone' },
-      {
-        path: 'store_tasks',
-        populate: [
-          { path: 'storeId', select: 'Name' },
-          { path: 'managerId', select: 'FullName Phone' }
-        ]
-      }
+      { path: 'assignedStores', select: 'Name Map_Address Phone' }
     ]);
     
-    return sendSuccess(res, 'Broadcast published successfully', {
-      broadcast,
-      storeTasksCreated: createdStoreTasks.length,
-      storeTasksFailed: broadcast.assignedStores.length - createdStoreTasks.length
-    });
+    return sendSuccess(res, 'Broadcast published successfully', { broadcast });
   } catch (error) {
     console.error('publishBroadcast error:', error);
     
@@ -448,35 +395,6 @@ const assignBroadcast = async (req, res) => {
           
           console.log(`[assignBroadcast] Processing store ${store.Name} with ${empIds.length} employees`);
           
-          // Find manager for StoreTask (needed for managerId field)
-          const allEmployees = await Employee.find({
-            ID_Branch: storeId,
-            Status: 'Đang hoạt động'
-          }).populate('ID_GroupUser');
-          
-          let manager = null;
-          for (const emp of allEmployees) {
-            const role = await getEmployeeRole(emp);
-            if (role === 'manager') {
-              manager = emp;
-              break;
-            }
-          }
-          
-          // If no manager, use first selected employee as fallback
-          if (!manager && empIds.length > 0) {
-            const firstEmp = await Employee.findById(empIds[0]);
-            if (firstEmp) {
-              console.log(`[assignBroadcast] No manager found for ${store.Name}, using first selected employee as fallback`);
-              manager = firstEmp;
-            }
-          }
-          
-          if (!manager) {
-            errors.push(`Cannot find manager or employee for store ${store.Name}`);
-            continue;
-          }
-          
           // Check if StoreTask already exists
           let storeTask = await StoreTask.findOne({
             broadcastId: broadcast._id,
@@ -488,8 +406,8 @@ const assignBroadcast = async (req, res) => {
             storeTask = new StoreTask({
               broadcastId: broadcast._id,
               storeId: storeId,
-              managerId: manager._id,
-              status: 'pending',
+              assignedPersonId: empIds[0],
+              status: 'assigned',
               assignedEmployees: empIds
             });
             
@@ -524,60 +442,46 @@ const assignBroadcast = async (req, res) => {
             }
           }
           
-          // Create UserTask for each selected employee
-          for (const employeeId of empIds) {
-            try {
-              // Find employee
-              const employee = await Employee.findById(employeeId).populate('ID_GroupUser');
-              if (!employee) {
-                errors.push(`Employee ${employeeId} not found`);
-                continue;
-              }
-              
-              if (employee.Status !== 'Đang hoạt động') {
-                errors.push(`Employee ${employee.FullName} is not active`);
-                continue;
-              }
-              
+          // Create UserTask for assignedPerson (empIds[0]) only
+          const assignedEmployeeId = empIds[0];
+          try {
+            const assignedEmployee = await Employee.findById(assignedEmployeeId).populate('ID_GroupUser');
+            if (!assignedEmployee) {
+              errors.push(`Employee ${assignedEmployeeId} not found`);
+            } else if (assignedEmployee.Status !== 'Đang hoạt động') {
+              errors.push(`Employee ${assignedEmployee.FullName} is not active`);
+            } else {
               // Check if UserTask already exists
               const existingUserTask = await UserTask.findOne({
                 broadcastId: broadcast._id,
-                employeeId: employeeId
+                employeeId: assignedEmployeeId
               });
               
               if (existingUserTask) {
-                console.log(`[assignBroadcast] UserTask already exists for employee ${employeeId}, skipping...`);
-                // Get the actual employee who is currently assigned
-                const assignedEmployee = await Employee.findById(existingUserTask.employeeId);
-                const assignedName = assignedEmployee?.FullName || 'N/A';
-                console.log(`[assignBroadcast] Assigned employee: ${assignedName} (ID: ${existingUserTask.employeeId})`);
-                errors.push(`Giao việc thất bại do công việc "${broadcast.title}" đã được giao cho nhân viên ${assignedName} phụ trách, vui lòng kiểm tra lại.`);
-                continue;
+                errors.push(`Giao việc thất bại do công việc "${broadcast.title}" đã được giao cho nhân viên ${assignedEmployee.FullName} phụ trách, vui lòng kiểm tra lại.`);
+              } else {
+                const userTask = new UserTask({
+                  storeTaskId: storeTask._id,
+                  broadcastId: broadcast._id,
+                  employeeId: assignedEmployeeId,
+                  checklist: broadcast.checklist.map(item => ({
+                    task: item.task,
+                    note: item.note || '',
+                    required: item.required,
+                    isCompleted: false
+                  })),
+                  status: 'assigned',
+                  evidences: []
+                });
+                
+                await userTask.save();
+                createdUserTasks.push(userTask);
+                console.log(`[assignBroadcast] Created UserTask for ${assignedEmployee.FullName} at ${store.Name}`);
               }
-              
-              // Create UserTask (Individual Task)
-              const userTask = new UserTask({
-                storeTaskId: storeTask._id,
-                broadcastId: broadcast._id,
-                employeeId: employeeId,
-                checklist: broadcast.checklist.map(item => ({
-                  task: item.task,
-                  note: item.note || '',
-                  required: item.required,
-                  isCompleted: false
-                })),
-                status: 'assigned',
-                evidences: []
-              });
-              
-              await userTask.save();
-              createdUserTasks.push(userTask);
-              console.log(`[assignBroadcast] Created UserTask for ${employee.FullName} at ${store.Name}`);
-              
-            } catch (error) {
-              console.error(`[assignBroadcast] Error processing employee ${employeeId}:`, error);
-              errors.push(`Error assigning to employee ${employeeId}: ${error.message}`);
             }
+          } catch (err) {
+            console.error(`[assignBroadcast] Error processing assigned employee ${assignedEmployeeId}:`, err);
+            errors.push(`Error assigning to employee ${assignedEmployeeId}: ${err.message}`);
           }
           
         } catch (error) {
@@ -649,33 +553,12 @@ const assignBroadcast = async (req, res) => {
           }
           
           if (!storeTask) {
-            // Find manager of this store
-            const managers = await Employee.find({
-              ID_Branch: employee.ID_Branch,
-              Status: 'Đang hoạt động'
-            }).populate('ID_GroupUser');
-            
-            let manager = null;
-            for (const emp of managers) {
-              const role = await getEmployeeRole(emp);
-              if (role === 'manager') {
-                manager = emp;
-                break;
-              }
-            }
-            
-            // Use current employee as fallback if no manager
-            if (!manager) {
-              console.log(`[assignBroadcast] No manager found, using employee ${employee.FullName} as fallback`);
-              manager = employee;
-            }
-            
-            // Create StoreTask
+            // Create StoreTask with employeeId as assignedPerson
             storeTask = new StoreTask({
               broadcastId: broadcast._id,
               storeId: employee.ID_Branch,
-              managerId: manager._id,
-              status: 'pending',
+              assignedPersonId: employeeId,
+              status: 'assigned',
               assignedEmployees: [employeeId]
             });
             
@@ -835,28 +718,12 @@ const updateUserTask = async (req, res) => {
         });
         
         if (!newStoreTask) {
-          // Find manager for new branch
-          const managers = await Employee.find({
-            ID_Branch: newEmployee.ID_Branch,
-            Status: 'Đang hoạt động'
-          }).populate('ID_GroupUser');
-          
-          let manager = null;
-          for (const emp of managers) {
-            const role = await getEmployeeRole(emp);
-            if (role === 'manager') {
-              manager = emp;
-              break;
-            }
-          }
-          
-          if (!manager) manager = newEmployee; // Fallback
-          
+          // Create StoreTask for new branch with newEmployee as assignedPerson
           newStoreTask = new StoreTask({
             broadcastId: userTask.broadcastId._id,
             storeId: newEmployee.ID_Branch,
-            managerId: manager._id,
-            status: 'pending',
+            assignedPersonId: newEmployee._id,
+            status: 'assigned',
             assignedEmployees: [newEmployee._id]
           });
           

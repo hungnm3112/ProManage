@@ -28,8 +28,7 @@ router.get('/accounts', async (req, res, next) => {
       .populate('ID_GroupUser')
       .populate('ID_Branch')
       .select('Phone FullName ID_GroupUser ID_Branch Email Image')
-      .sort({ FullName: 1 })
-      .limit(50);
+      .sort({ FullName: 1 });
 
     // Get roles for each employee
     const accountsWithRoles = await Promise.all(

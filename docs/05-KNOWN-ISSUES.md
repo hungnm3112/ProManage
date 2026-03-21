@@ -11,8 +11,8 @@
 
 ## 📊 TỔNG QUAN
 
-**Tổng số vấn đề:** 20
-- ✅ Đã sửa: 10
+**Tổng số vấn đề:** 21
+- ✅ Đã sửa: 11
 - 🚀 Implementation Queue: 4 (Ready to code)
 - ⚠️ Known Issues: 5
 - 🔧 Technical Debt: 4
@@ -383,6 +383,34 @@ setInterval(() => loadDashboard(false), 30000);
 
 **Files đã sửa:**
 - `public/js/admin-dashboard.js`
+
+---
+
+### 11. Dev Tool Account Switcher chỉ hiển thị 50 tài khoản ✅
+
+**Ngày phát hiện:** 21/03/2026
+**Ngày sửa:** 21/03/2026
+**Mức độ:** 🟢 MEDIUM
+
+**Mô tả vấn đề:**
+- File: `src/routes/devRoutes.js` line 32
+- `.limit(50)` giới hạn số tài khoản trả về khi dev tool load danh sách nhân viên
+- Không có ô tìm kiếm → phải cuộn tìm thủ công
+- Cards hiển thị nhỏ, khó đọc, dùng grid 2 cột
+
+**Tác động:**
+- Dev chỉ thấy 50/N nhân viên → không thể chuyển sang tài khoản không nằm trong top 50
+- Mất thời gian tìm kiếm khi cần test với tài khoản cụ thể
+
+**Solution:**
+- Xoá `.limit(50)` trong devRoutes.js → trả về toàn bộ nhân viên đang hoạt động
+- Thêm ô tìm kiếm client-side vào modal (lọc theo tên / chức vụ / chi nhánh, debounce 200ms)
+- Cards đổi sang 1 cột, lớn hơn, rõ ràng hơn (giống tab "Nhân viên" trong modal "Giao việc")
+- Reset ô tìm kiếm mỗi khi mở modal
+
+**Files đã sửa:**
+- `src/routes/devRoutes.js` — xoá `.limit(50)`
+- `public/js/account-switcher.js` — thêm search + cải thiện card style
 
 ---
 

@@ -41,14 +41,14 @@ const getAdminDashboard = async (req, res) => {
       updatedAt: { $gte: startOfMonth, $lte: endOfMonth }
     });
     
-    // NEW: Stats for KPI cards - based on StoreTask status
+    // KPI cards - based on StoreTask status (v3.0: assigned | in_progress | completed)
     const completedTasks = await StoreTask.countDocuments({ status: 'completed' });
     const inProgressTasks = await StoreTask.countDocuments({ status: 'in_progress' });
-    const pendingConfirmTasks = await StoreTask.countDocuments({ status: 'pending' });
+    const assignedTasks = await StoreTask.countDocuments({ status: 'assigned' });
     
-    // Overdue tasks: Find all non-completed StoreTasks and check broadcast deadline
+    // Overdue tasks: in_progress StoreTasks past broadcast deadline
     const overdueStoreTasksRaw = await StoreTask.find({
-      status: { $in: ['pending', 'accepted', 'in_progress'] }
+      status: 'in_progress'
     }).populate('broadcastId', 'deadline');
     
     const overdueTasks = overdueStoreTasksRaw.filter(task => {
@@ -178,7 +178,7 @@ const getAdminDashboard = async (req, res) => {
         completedTasks,
         overdueTasks,
         inProgressTasks,
-        pendingConfirmTasks,
+        assignedTasks,
         // Legacy fields
         pendingReviews,
         totalStores,
@@ -211,128 +211,112 @@ const getAdminTasksByStatus = async (req, res) => {
     let tasks = [];
     
     switch (status) {
+      case 'assigned':
+        query = { status: 'assigned' };
+        tasks = await StoreTask.find(query)
+          .populate('broadcastId', 'title description priority deadline')
+          .populate('storeId', 'Name Map_Address')
+          .populate('assignedPersonId', 'FullName Phone')
+          .populate('assignedEmployees', 'FullName')
+          .sort({ createdAt: -1 })
+          .limit(50);
+        break;
+
       case 'completed':
-        // Completed tasks
         query = { status: 'completed' };
         tasks = await StoreTask.find(query)
           .populate('broadcastId', 'title description priority deadline')
           .populate('storeId', 'Name Map_Address')
-          .populate('managerId', 'FullName')
+          .populate('assignedPersonId', 'FullName Phone')
           .populate('assignedEmployees', 'FullName')
           .sort({ completedAt: -1 })
           .limit(50);
         break;
         
-      case 'overdue':
-        // Overdue tasks: not completed and past deadline
-        const overdueStoreTasks = await StoreTask.find({
-          status: { $in: ['pending', 'accepted', 'in_progress'] }
-        })
+      case 'overdue': {
+        // Overdue: in_progress tasks past broadcast deadline
+        const overdueStoreTasks = await StoreTask.find({ status: 'in_progress' })
           .populate('broadcastId', 'title description priority deadline')
           .populate('storeId', 'Name Map_Address')
-          .populate('managerId', 'FullName')
+          .populate('assignedPersonId', 'FullName Phone')
           .populate('assignedEmployees', 'FullName')
           .sort({ createdAt: -1 })
           .limit(100);
         
-        // Filter by deadline
         tasks = overdueStoreTasks.filter(task => {
           return task.broadcastId && task.broadcastId.deadline < now;
         });
         break;
+      }
         
       case 'in-progress':
-        // In-progress tasks
         query = { status: 'in_progress' };
         tasks = await StoreTask.find(query)
           .populate('broadcastId', 'title description priority deadline')
           .populate('storeId', 'Name Map_Address')
-          .populate('managerId', 'FullName')
+          .populate('assignedPersonId', 'FullName Phone')
           .populate('assignedEmployees', 'FullName')
           .sort({ startedAt: -1 })
           .limit(50);
         break;
         
-      case 'pending-confirm':
-        // Pending confirmation tasks
-        query = { status: 'pending' };
-        tasks = await StoreTask.find(query)
-          .populate('broadcastId', 'title description priority deadline')
-          .populate('storeId', 'Name Map_Address')
-          .populate('managerId', 'FullName')
-          .populate('assignedEmployees', 'FullName')
-          .sort({ createdAt: -1 })
-          .limit(50);
-        break;
-        
       default:
-        return sendError(res, 'Invalid status. Must be one of: completed, overdue, in-progress, pending-confirm', 400);
+        return sendError(res, 'Invalid status. Must be one of: completed, overdue, in-progress, assigned', 400);
     }
     
-    // Get UserTask data for each StoreTask
-    const UserTask = require('../models/UserTask');
-    const tasksWithUserTasks = await Promise.all(tasks.map(async (task) => {
-      const userTasks = await UserTask.find({ storeTaskId: task._id })
+    // Get single UserTask (for assignedPerson) per StoreTask
+    const tasksWithUserTask = await Promise.all(tasks.map(async (task) => {
+      const userTask = await UserTask.findOne({ storeTaskId: task._id })
         .populate({
           path: 'employeeId',
-          select: 'FullName Phone ID_Branch',
-          populate: {
-            path: 'ID_Branch',
-            select: 'Name'
-          }
+          select: 'FullName Phone ID_Branch ID_GroupUser',
+          populate: [
+            { path: 'ID_Branch', select: 'Name' },
+            { path: 'ID_GroupUser', select: 'GroupName' }
+          ]
         })
         .select('_id employeeId status checklist');
 
-      return { task, userTasks };
+      return { task, userTask };
     }));
 
     // Format response data
-    const formattedTasks = tasksWithUserTasks.map(({ task, userTasks }) => {
+    const formattedTasks = tasksWithUserTask.map(({ task, userTask }) => {
       const broadcast = task.broadcastId || {};
       const store = task.storeId || {};
-      const manager = task.managerId || {};
+      const assignedPerson = task.assignedPersonId || {};
 
-      const formattedUserTasks = userTasks.map(ut => {
-        const emp = ut.employeeId || {};
-        const checklistTotal = ut.checklist?.length || 0;
-        const checklistDone  = ut.checklist?.filter(i => i.isCompleted).length || 0;
-        return {
-          userTaskId:     ut._id,
-          employeeId:     emp._id,
-          employeeName:   emp.FullName || 'Chưa rõ',
-          employeePhone:  emp.Phone || null,
-          employeeBranch: emp.ID_Branch?.Name || null,
-          status:         ut.status,
-          checklistDone,
-          checklistTotal
-        };
-      });
-
-      const firstEmployee = formattedUserTasks[0] || {};
+      let checklistTotal = 0, checklistDone = 0, checklistRequired = 0, checklistAssigned = 0;
+      if (userTask) {
+        checklistTotal    = userTask.checklist?.length || 0;
+        checklistDone     = userTask.checklist?.filter(i => i.isCompleted).length || 0;
+        checklistRequired = userTask.checklist?.filter(i => i.required).length || 0;
+        checklistAssigned = userTask.checklist?.filter(i => i.assignedTo).length || 0;
+      }
 
       return {
         _id: task._id,
         broadcastId: broadcast._id,
-        userTaskId: firstEmployee.userTaskId,
+        userTaskId: userTask?._id || null,
         broadcastTitle: broadcast.title || 'N/A',
         broadcastDescription: broadcast.description || '',
         storeName: store.Name || 'N/A',
         storeAddress: store.Map_Address || '',
-        managerName: manager.FullName || 'N/A',
-        employeeId: firstEmployee.employeeId,
-        employeeName: firstEmployee.employeeName || 'Chưa giao',
-        employeePhone: firstEmployee.employeePhone || null,
-        employeeBranch: firstEmployee.employeeBranch || null,
+        assignedPersonId: assignedPerson._id || null,
+        assignedPersonName: assignedPerson.FullName || 'Chưa giao',
+        assignedPersonPhone: assignedPerson.Phone || null,
         deadline: broadcast.deadline,
         status: task.status,
         priority: broadcast.priority || 'medium',
         completionPercent: task.completionRate || 0,
+        checklistTotal,
+        checklistDone,
+        checklistRequired,
+        checklistAssigned,
+        assignedEmployeeCount: task.assignedEmployees?.length || 0,
         createdAt: task.createdAt,
         completedAt: task.completedAt,
-        startedAt: task.startedAt,
-        acceptedAt: task.acceptedAt,
-        userTasks: formattedUserTasks,
-        employeeCount: formattedUserTasks.length
+        startedAt: task.startedAt
       };
     });
     
@@ -483,37 +467,92 @@ const getEmployeeDashboard = async (req, res) => {
     const currentUser = req.user;
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    
-    // Get employee's tasks
-    const allTasks = await UserTask.find({ employeeId: currentUser._id });
-    
-    // Task overview
-    const totalTasks = allTasks.length;
-    const assignedTasks = allTasks.filter(t => t.status === 'assigned').length;
-    const inProgressTasks = allTasks.filter(t => t.status === 'in_progress').length;
-    const submittedTasks = allTasks.filter(t => t.status === 'submitted').length;
-    const approvedTasks = allTasks.filter(t => t.status === 'approved').length;
-    const rejectedTasks = allTasks.filter(t => t.status === 'rejected').length;
-    
-    // Tasks completed this month
+
+    // ----------- Section 1: Việc tôi phụ trách (me ∈ assignedEmployees) -----------
+    const responsibleStoreTasks = await StoreTask.find({
+      assignedEmployees: currentUser._id,
+      status: { $in: ['assigned', 'in_progress'] }
+    })
+      .populate('broadcastId', 'title priority deadline checklist')
+      .populate('assignedEmployees', 'FullName Phone')
+      .sort({ createdAt: -1 });
+
+    // Bulk lookup: UserTask ID for each responsible StoreTask (must be BEFORE the map)
+    const responsibleStoreTaskIds_arr = responsibleStoreTasks.map(st => st._id);
+    const responsibleUserTaskDocs = await UserTask.find({
+      storeTaskId: { $in: responsibleStoreTaskIds_arr },
+      employeeId: currentUser._id
+    }).select('_id storeTaskId');
+    const storeToUserTaskId = {};
+    responsibleUserTaskDocs.forEach(ut => {
+      storeToUserTaskId[ut.storeTaskId.toString()] = ut._id;
+    });
+
+    const responsibleTasks = responsibleStoreTasks.map(st => ({
+      _id: st._id,
+      userTaskId: storeToUserTaskId[st._id.toString()] || null,
+      status: st.status,
+      completionRate: st.completionRate,
+      deadline: st.broadcastId?.deadline,
+      priority: st.broadcastId?.priority,
+      broadcastTitle: st.broadcastId?.title,
+      broadcastId: st.broadcastId?._id,
+      assignedEmployees: st.assignedEmployees,
+      checklistCount: st.broadcastId?.checklist?.length || 0,
+      startedAt: st.startedAt,
+      isOverdue: st.broadcastId?.deadline && st.broadcastId.deadline < now
+    }));
+
+    const responsibleStoreTaskIds = new Set(
+      responsibleStoreTasks.map(st => st._id.toString())
+    );
+
+    // ----------- Section 2: Việc của tôi (worker, không phải phụ trách) -----------
+    const allUserTasks = await UserTask.find({ employeeId: currentUser._id });
+
+    const allActiveUserTasks = await UserTask.find({
+      employeeId: currentUser._id,
+      status: { $in: ['assigned', 'in_progress', 'submitted'] }
+    })
+      .populate('broadcastId', 'title priority deadline')
+      .populate('storeTaskId', 'deadline assignedPersonId')
+      .sort({ createdAt: -1 });
+
+    // Loại bỏ UserTask của các StoreTask mà employee là assignedPerson
+    // (đã hiển thị ở Section 1, tránh trùng lặp)
+    const myTasks = allActiveUserTasks
+      .filter(ut => !responsibleStoreTaskIds.has(ut.storeTaskId?._id?.toString()))
+      .map(task => ({
+        ...task.toObject(),
+        stats: task.getStats ? task.getStats() : null,
+        isOverdue: task.storeTaskId?.deadline && task.storeTaskId.deadline < now
+      }));
+
+    // ----------- Overview KPIs -----------
+    const totalTasks = allUserTasks.length;
+    const assignedTasks = allUserTasks.filter(t => t.status === 'assigned').length;
+    const inProgressTasks = allUserTasks.filter(t => t.status === 'in_progress').length;
+    const submittedTasks = allUserTasks.filter(t => t.status === 'submitted').length;
+    const approvedTasks = allUserTasks.filter(t => t.status === 'approved').length;
+    const rejectedTasks = allUserTasks.filter(t => t.status === 'rejected').length;
+
     const completedThisMonth = await UserTask.countDocuments({
       employeeId: currentUser._id,
       status: 'approved',
       reviewedAt: { $gte: startOfMonth }
     });
-    
-    // Average rating
+
     const ratedTasks = await UserTask.find({
       employeeId: currentUser._id,
       status: 'approved',
       rating: { $exists: true, $ne: null }
     }).select('rating');
-    
+
     const avgRating = ratedTasks.length > 0
       ? ratedTasks.reduce((sum, t) => sum + t.rating, 0) / ratedTasks.length
       : 0;
-    
-    // Recent feedback (last 5 approved/rejected tasks)
+
+    // ----------- Recent feedback -----------
     const recentFeedback = await UserTask.find({
       employeeId: currentUser._id,
       status: { $in: ['approved', 'rejected'] },
@@ -523,24 +562,7 @@ const getEmployeeDashboard = async (req, res) => {
       .limit(5)
       .populate('broadcastId', 'title')
       .select('status rating reviewNote reviewedAt');
-    
-    // Current active tasks (assigned or in_progress)
-    const activeTasks = await UserTask.find({
-      employeeId: currentUser._id,
-      status: { $in: ['assigned', 'in_progress'] }
-    })
-      .populate('broadcastId', 'title priority deadline')
-      .populate('storeTaskId', 'deadline')
-      .sort({ createdAt: -1 })
-      .limit(10);
-    
-    // Tasks with stats
-    const activeTasksWithStats = activeTasks.map(task => ({
-      ...task.toObject(),
-      stats: task.getStats(),
-      isOverdue: task.storeTaskId?.deadline && task.storeTaskId.deadline < now
-    }));
-    
+
     const dashboardData = {
       overview: {
         totalTasks,
@@ -550,12 +572,14 @@ const getEmployeeDashboard = async (req, res) => {
         approvedTasks,
         rejectedTasks,
         completedThisMonth,
-        avgRating: Math.round(avgRating * 10) / 10
+        avgRating: Math.round(avgRating * 10) / 10,
+        responsibleCount: responsibleTasks.length
       },
-      activeTasks: activeTasksWithStats,
+      responsibleTasks,
+      myTasks,
       recentFeedback
     };
-    
+
     return sendSuccess(res, 'Employee dashboard data fetched successfully', dashboardData);
   } catch (error) {
     console.error('getEmployeeDashboard error:', error);
