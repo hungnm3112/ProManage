@@ -46,7 +46,7 @@ function logout() {
 document.getElementById('logoutBtn').addEventListener('click', logout);
 
 // Load dashboard data
-async function loadDashboard() {
+async function loadDashboard(refreshTaskList = true) {
   try {
     const response = await fetch('/api/dashboard/admin', {
       headers: {
@@ -75,8 +75,8 @@ async function loadDashboard() {
     document.getElementById('loading').classList.add('hidden');
     document.getElementById('dashboard').classList.remove('hidden');
 
-    // Load completed tasks by default
-    loadTaskList('completed');
+    // Reload task list preserving current filter (default: 'completed')
+    if (refreshTaskList) loadTaskList(currentTaskFilter);
 
   } catch (error) {
     console.error('Error loading dashboard:', error);
@@ -170,107 +170,8 @@ async function loadTaskList(status) {
       return;
     }
     
-    taskListContainer.innerHTML = tasks.map(task => {
-      const completionPercent = calculateCompletionPercent(task);
-      const statusBadge = getTaskStatusBadge(task.status);
-      const canEdit = task.status !== 'approved'; // Cannot edit completed tasks
-      const hasUserTask = !!task.userTaskId; // Check if task has been assigned to employee
-      
-      // Debug logging
-      if (!hasUserTask) {
-        console.log('[Task without UserTask]', { 
-          broadcastTitle: task.broadcastTitle, 
-          status: task.status, 
-          userTaskId: task.userTaskId,
-          employeeName: task.employeeName 
-        });
-      }
-      
-      return `
-        <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 hover:bg-gray-100 transition-colors">
-          <div class="flex justify-between items-start mb-2">
-            <h4 class="font-semibold text-base text-gray-900 flex-1">${task.broadcastTitle || task.title}</h4>
-            <div class="flex gap-2 ml-3">
-              <span class="px-2 py-1 rounded-full text-xs font-semibold ${getPriorityBadge(task.priority)}">${translatePriority(task.priority).toUpperCase()}</span>
-              ${statusBadge}
-            </div>
-          </div>
-          <div class="text-sm text-gray-600 mb-2">
-            <p><span class="font-medium">Chi nhánh:</span> ${task.storeName || 'N/A'}</p>
-            ${task.managerName ? `<p><span class="font-medium">Quản lý:</span> ${task.managerName}</p>` : ''}
-            ${task.employeeName ? `<p><span class="font-medium">Nhân viên:</span> ${task.employeeName}</p>` : '<p class="text-amber-600 italic font-medium">⚠️ Chưa giao cho nhân viên</p>'}
-          </div>
-          <div class="flex items-center justify-between">
-            <div class="flex-1">
-              <div class="flex items-center justify-between text-xs text-gray-600 mb-1">
-                <span>Completion: ${completionPercent}%</span>
-                ${hasUserTask && canEdit ? `
-                  <div class="flex gap-2">
-                    <button class="edit-details-btn text-blue-600 hover:text-blue-800 font-medium" data-task-id="${task.userTaskId}" title="Sửa hoặc giao lại công việc">
-                      <i class="fas fa-edit"></i> Sửa/Giao lại
-                    </button>
-                    <button class="delete-task-btn text-red-600 hover:text-red-800 font-medium" data-task-id="${task.userTaskId}" title="Xóa task">
-                      <i class="fas fa-trash"></i> Xóa
-                    </button>
-                  </div>
-                ` : !hasUserTask && canEdit ? `
-                  <span class="text-amber-600 text-xs font-medium italic">
-                    <i class="fas fa-info-circle"></i> Vui lòng giao task cho nhân viên từ modal "Giao việc" trước
-                  </span>
-                ` : ''}
-              </div>
-              <div class="w-full bg-gray-200 rounded-full h-2">
-                <div class="bg-gradient-to-r from-purple-500 to-blue-500 h-2 rounded-full transition-all" style="width: ${completionPercent}%"></div>
-              </div>
-            </div>
-            ${status === 'overdue' ? `<span class="ml-3 text-xs text-red-600 font-medium">Quá hạn ${calculateOverdueDays(task.deadline)} ngày</span>` : ''}
-          </div>
-        </div>
-      `;
-    }).join('');
-    
-    // Attach event listeners to edit buttons
-    document.querySelectorAll('.edit-details-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const taskId = btn.getAttribute('data-task-id');
-        const task = tasks.find(t => t.userTaskId === taskId);
-        
-        console.log('[Edit Button Click]', { taskId, task, hasUserTaskId: !!task?.userTaskId });
-        
-        if (!task) {
-          alert('Không tìm thấy task. Vui lòng refresh trang.');
-          return;
-        }
-        
-        if (!task.userTaskId) {
-          alert('Task này chưa được giao cho nhân viên nào. Vui lòng dùng modal "Giao việc" để giao task trước.');
-          return;
-        }
-        
-        openEditTaskDetailsModal(task);
-      });
-    });
-    
-    document.querySelectorAll('.delete-task-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const taskId = btn.getAttribute('data-task-id');
-        const task = tasks.find(t => t.userTaskId === taskId);
-        
-        if (!task) {
-          alert('Không tìm thấy task. Vui lòng refresh trang.');
-          return;
-        }
-        
-        if (!task.userTaskId) {
-          alert('Task này chưa được giao cho nhân viên nào. Không thể xóa.');
-          return;
-        }
-        
-        handleDeleteTask(task);
-      });
-    });
+    taskListContainer.innerHTML = renderAccordionView(tasks);
+    attachAccordionListeners(tasks);
     
   } catch (error) {
     console.error('Error loading task list:', error);
@@ -300,11 +201,211 @@ function getTaskStatusBadge(status) {
   return badges[status] || '';
 }
 
+function getUserTaskStatusBadge(status) {
+  const map = {
+    assigned:    'bg-yellow-100 text-yellow-700',
+    in_progress: 'bg-blue-100 text-blue-700',
+    submitted:   'bg-purple-100 text-purple-700',
+    approved:    'bg-green-100 text-green-700',
+    rejected:    'bg-red-100 text-red-700'
+  };
+  return map[status] || 'bg-gray-100 text-gray-700';
+}
+
+// ==================== ACCORDION RENDER (3-LEVEL) ====================
+
+function renderAccordionView(tasks) {
+  const groups = {};
+  tasks.forEach(task => {
+    const bId = (task.broadcastId || task.broadcastTitle || '').toString();
+    if (!groups[bId]) {
+      groups[bId] = {
+        broadcastTitle: task.broadcastTitle,
+        priority:       task.priority,
+        deadline:       task.deadline,
+        storeTasks:     []
+      };
+    }
+    groups[bId].storeTasks.push(task);
+  });
+
+  return Object.entries(groups).map(([bId, group]) => {
+    const totalStores    = group.storeTasks.length;
+    const totalEmployees = group.storeTasks.reduce((s, st) => s + (st.employeeCount || 0), 0);
+    const storeTasksHtml = group.storeTasks.map(st => renderStoreTaskRow(st)).join('');
+
+    return `
+    <div class="broadcast-group border border-gray-200 rounded-lg mb-3 overflow-hidden">
+      <div class="broadcast-header flex justify-between items-center p-4 bg-white cursor-pointer hover:bg-gray-50 transition-colors"
+           data-broadcast-id="${bId}">
+        <div class="flex-1 min-w-0">
+          <h4 class="font-semibold text-gray-900 truncate">${group.broadcastTitle || 'N/A'}</h4>
+          <p class="text-xs text-gray-500 mt-0.5">
+            ${totalStores} chi nhánh &bull; ${totalEmployees} nhân viên &bull;
+            Deadline: ${group.deadline ? new Date(group.deadline).toLocaleDateString('vi-VN') : 'N/A'}
+          </p>
+        </div>
+        <div class="flex gap-2 items-center ml-3 flex-shrink-0">
+          <span class="px-2 py-1 rounded-full text-xs font-semibold ${getPriorityBadge(group.priority)}">
+            ${translatePriority(group.priority).toUpperCase()}
+          </span>
+          <i class="fas fa-chevron-right text-gray-400 broadcast-chevron transition-transform duration-200"></i>
+        </div>
+      </div>
+      <div class="store-tasks-container hidden bg-gray-50 border-t border-gray-100">
+        ${storeTasksHtml}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderStoreTaskRow(st) {
+  const userTasksHtml = (st.userTasks || []).map(ut => renderUserTaskRow(ut, st)).join('');
+  const hasEmployees  = (st.userTasks || []).length > 0;
+
+  return `
+  <div class="store-task-item border-b border-gray-100 last:border-0">
+    <div class="store-header flex justify-between items-center px-4 py-3 cursor-pointer hover:bg-white transition-colors"
+         data-store-task-id="${st._id}">
+      <div class="flex items-center gap-2 flex-1 min-w-0">
+        <i class="fas fa-store text-purple-500 text-sm flex-shrink-0"></i>
+        <div class="min-w-0">
+          <p class="font-medium text-sm text-gray-800 truncate">${st.storeName || 'N/A'}</p>
+          <p class="text-xs text-gray-500">
+            Quản lý: ${st.managerName || 'N/A'} &bull;
+            ${st.employeeCount || 0} nhân viên &bull;
+            ${st.completionPercent || 0}%
+          </p>
+        </div>
+      </div>
+      <div class="flex gap-2 items-center ml-3 flex-shrink-0">
+        ${getTaskStatusBadge(st.status)}
+        ${hasEmployees
+          ? `<i class="fas fa-chevron-right text-gray-400 store-chevron transition-transform duration-200"></i>`
+          : `<span class="text-xs text-amber-500 italic">Chưa có NV</span>`
+        }
+      </div>
+    </div>
+    ${hasEmployees ? `
+    <div class="user-tasks-container hidden bg-white border-t border-gray-100">
+      ${userTasksHtml}
+    </div>` : ''}
+  </div>`;
+}
+
+function renderUserTaskRow(ut, st) {
+  const canEdit = st.status !== 'completed';
+  const progress = ut.checklistTotal > 0
+    ? `${ut.checklistDone}/${ut.checklistTotal} checklist`
+    : 'Chưa có checklist';
+
+  return `
+  <div class="user-task-row flex items-center justify-between px-6 py-3 border-b border-gray-50 last:border-0 hover:bg-gray-50">
+    <div class="flex items-center gap-3 flex-1 min-w-0">
+      <i class="fas fa-user-circle text-gray-300 text-2xl flex-shrink-0"></i>
+      <div class="min-w-0">
+        <p class="text-sm font-medium text-gray-800 truncate">${ut.employeeName}</p>
+        <p class="text-xs text-gray-500">
+          ${ut.employeePhone ? `${ut.employeePhone} &bull; ` : ''}${progress}
+        </p>
+      </div>
+      <span class="text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${getUserTaskStatusBadge(ut.status)}">
+        ${translateStatus(ut.status)}
+      </span>
+    </div>
+    ${canEdit && ut.userTaskId ? `
+    <div class="flex gap-3 ml-3 flex-shrink-0">
+      <button class="edit-details-btn text-blue-600 hover:text-blue-800 text-xs font-medium"
+              data-task-id="${ut.userTaskId}"
+              title="Sửa hoặc giao lại">
+        <i class="fas fa-edit"></i> Sửa
+      </button>
+      <button class="delete-task-btn text-red-500 hover:text-red-700 text-xs font-medium"
+              data-task-id="${ut.userTaskId}"
+              title="Xóa task">
+        <i class="fas fa-trash"></i> Xóa
+      </button>
+    </div>` : ''}
+  </div>`;
+}
+
+function attachAccordionListeners(tasks) {
+  // Level 1: Broadcast → Stores
+  document.querySelectorAll('.broadcast-header').forEach(header => {
+    header.addEventListener('click', () => {
+      const container = header.nextElementSibling;
+      const chevron   = header.querySelector('.broadcast-chevron');
+      const isHidden  = container.classList.contains('hidden');
+      container.classList.toggle('hidden', !isHidden);
+      chevron.classList.toggle('rotate-90', isHidden);
+    });
+  });
+
+  // Level 2: Store → Employees
+  document.querySelectorAll('.store-header').forEach(header => {
+    header.addEventListener('click', () => {
+      const container = header.nextElementSibling;
+      if (!container || !container.classList.contains('user-tasks-container')) return;
+      const chevron  = header.querySelector('.store-chevron');
+      const isHidden = container.classList.contains('hidden');
+      container.classList.toggle('hidden', !isHidden);
+      chevron?.classList.toggle('rotate-90', isHidden);
+    });
+  });
+
+  // Level 3: Edit button
+  document.querySelectorAll('.edit-details-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const userTaskId = btn.getAttribute('data-task-id');
+      let storeTask = null;
+      let userTaskData = null;
+      for (const task of tasks) {
+        const found = (task.userTasks || []).find(ut => ut.userTaskId?.toString() === userTaskId);
+        if (found) { storeTask = task; userTaskData = found; break; }
+      }
+      if (!storeTask) { alert('Không tìm thấy task. Vui lòng refresh trang.'); return; }
+      // Build a task object compatible with openEditTaskDetailsModal
+      const taskForModal = {
+        ...storeTask,
+        userTaskId,
+        employeeId:     userTaskData.employeeId,
+        employeeName:   userTaskData.employeeName,
+        employeePhone:  userTaskData.employeePhone,
+        employeeBranch: userTaskData.employeeBranch
+      };
+      openEditTaskDetailsModal(taskForModal);
+    });
+  });
+
+  // Level 3: Delete button
+  document.querySelectorAll('.delete-task-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const userTaskId = btn.getAttribute('data-task-id');
+      let storeTask = null;
+      let userTaskData = null;
+      for (const task of tasks) {
+        const found = (task.userTasks || []).find(ut => ut.userTaskId?.toString() === userTaskId);
+        if (found) { storeTask = task; userTaskData = found; break; }
+      }
+      if (!storeTask) { alert('Không tìm thấy task. Vui lòng refresh trang.'); return; }
+      const taskForDelete = {
+        ...storeTask,
+        userTaskId,
+        employeeId:   userTaskData.employeeId,
+        employeeName: userTaskData.employeeName
+      };
+      handleDeleteTask(taskForDelete);
+    });
+  });
+}
+
 // Load dashboard on page load
 loadDashboard();
 
-// Refresh every 30 seconds
-setInterval(loadDashboard, 30000);
+// Auto-refresh KPI counts only — do NOT re-render task list (would collapse accordion)
+setInterval(() => loadDashboard(false), 30000);
 
 // ==================== BROADCAST MODAL LOGIC ====================
 
@@ -2214,8 +2315,12 @@ function calculateEditDeadline(taskType) {
 
 // Helper function to build recurring data
 function buildEditRecurringData(taskType) {
+  if (taskType === 'onetime') {
+    return { enabled: false };
+  }
+
   const recurringData = {
-    enabled: taskType !== 'onetime',
+    enabled: true,
     frequency: taskType,
     pattern: {}
   };
@@ -2657,7 +2762,6 @@ saveEditDetailsBtn.addEventListener('click', async () => {
     loadTaskList(currentTaskFilter);
     
   } catch (error) {
-    console.error('Error updating task details:', error);
     errorMessage.textContent = error.message || 'Đã xảy ra lỗi';
     errorModal.classList.remove('hidden');
   } finally {

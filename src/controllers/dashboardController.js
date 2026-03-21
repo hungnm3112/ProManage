@@ -272,8 +272,7 @@ const getAdminTasksByStatus = async (req, res) => {
     // Get UserTask data for each StoreTask
     const UserTask = require('../models/UserTask');
     const tasksWithUserTasks = await Promise.all(tasks.map(async (task) => {
-      // Find first UserTask for this StoreTask
-      const userTask = await UserTask.findOne({ storeTaskId: task._id })
+      const userTasks = await UserTask.find({ storeTaskId: task._id })
         .populate({
           path: 'employeeId',
           select: 'FullName Phone ID_Branch',
@@ -282,46 +281,48 @@ const getAdminTasksByStatus = async (req, res) => {
             select: 'Name'
           }
         })
-        .select('_id employeeId');
-      
-      return {
-        task,
-        userTask
-      };
+        .select('_id employeeId status checklist');
+
+      return { task, userTasks };
     }));
-    
+
     // Format response data
-    const formattedTasks = tasksWithUserTasks.map(({ task, userTask }) => {
+    const formattedTasks = tasksWithUserTasks.map(({ task, userTasks }) => {
       const broadcast = task.broadcastId || {};
       const store = task.storeId || {};
       const manager = task.managerId || {};
-      const employee = userTask?.employeeId || (task.assignedEmployees && task.assignedEmployees[0]);
-      
-      // Debug: Log employee info
-      if (userTask) {
-        console.log('[Dashboard API] Task employee info:', {
-          taskId: task._id,
-          userTaskId: userTask._id,
-          hasEmployee: !!employee,
-          employeeId: employee?._id,
-          employeeName: employee?.FullName,
-          employeePhone: employee?.Phone,
-          employeeBranch: employee?.ID_Branch?.Name
-        });
-      }
-      
+
+      const formattedUserTasks = userTasks.map(ut => {
+        const emp = ut.employeeId || {};
+        const checklistTotal = ut.checklist?.length || 0;
+        const checklistDone  = ut.checklist?.filter(i => i.isCompleted).length || 0;
+        return {
+          userTaskId:     ut._id,
+          employeeId:     emp._id,
+          employeeName:   emp.FullName || 'Chưa rõ',
+          employeePhone:  emp.Phone || null,
+          employeeBranch: emp.ID_Branch?.Name || null,
+          status:         ut.status,
+          checklistDone,
+          checklistTotal
+        };
+      });
+
+      const firstEmployee = formattedUserTasks[0] || {};
+
       return {
         _id: task._id,
-        userTaskId: userTask?._id,
+        broadcastId: broadcast._id,
+        userTaskId: firstEmployee.userTaskId,
         broadcastTitle: broadcast.title || 'N/A',
         broadcastDescription: broadcast.description || '',
         storeName: store.Name || 'N/A',
         storeAddress: store.Map_Address || '',
         managerName: manager.FullName || 'N/A',
-        employeeId: employee?._id,
-        employeeName: employee?.FullName || 'Chưa giao',
-        employeePhone: employee?.Phone || null,
-        employeeBranch: employee?.ID_Branch?.Name || null,
+        employeeId: firstEmployee.employeeId,
+        employeeName: firstEmployee.employeeName || 'Chưa giao',
+        employeePhone: firstEmployee.employeePhone || null,
+        employeeBranch: firstEmployee.employeeBranch || null,
         deadline: broadcast.deadline,
         status: task.status,
         priority: broadcast.priority || 'medium',
@@ -329,7 +330,9 @@ const getAdminTasksByStatus = async (req, res) => {
         createdAt: task.createdAt,
         completedAt: task.completedAt,
         startedAt: task.startedAt,
-        acceptedAt: task.acceptedAt
+        acceptedAt: task.acceptedAt,
+        userTasks: formattedUserTasks,
+        employeeCount: formattedUserTasks.length
       };
     });
     
