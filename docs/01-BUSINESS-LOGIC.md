@@ -1110,15 +1110,17 @@ if (!allRequiredCompleted) {
    - Filter broadcast.deadline < hiện tại
 3. Với các loại khác: query StoreTask trực tiếp
 4. **Với mỗi StoreTask:**
-   - Tìm UserTask đầu tiên (để lấy userTaskId và employeeId)
+   - Tìm **TẤT CẢ UserTasks** (UserTask.find, không phải findOne)
    - **Populate employeeId.Phone và employeeId.ID_Branch** (nested populate)
-   - Lấy thông tin nhân viên: Ho_va_ten/FullName, Phone, ID_Branch.Name/ID_Branch.Map_Address
-5. **Format response:**
+   - Tính checklistDone/checklistTotal cho mỗi UserTask
+5. **Format response (mỗi StoreTask):**
+   - broadcastId (để frontend group theo broadcast)
    - broadcastTitle, storeName, managerName
-   - **employeeId, employeeName, employeePhone, employeeBranch** (thông tin nhân viên được giao)
-   - deadline, status, priority, completionPercent
-   - **userTaskId** (cho reassign/delete operations)
-   - Các timestamps khác nhau
+   - employeeId, employeeName, employeePhone, employeeBranch (nhân viên đầu tiên — backward compat)
+   - userTaskId (UserTask đầu tiên — backward compat)
+   - deadline, status, priority, completionPercent, timestamps
+   - **`userTasks[]`** — mảng TẤT CẢ nhân viên của StoreTask này, mỗi phần tử gồm: userTaskId, employeeId, employeeName, employeePhone, employeeBranch, status, checklistDone, checklistTotal
+   - **`employeeCount`** — số nhân viên (length của userTasks[])
 
 **Quy tắc nghiệp vụ:**
 - Trả về userTaskId (QUAN TRỌNG cho reassign/delete)
@@ -1127,9 +1129,16 @@ if (!allRequiredCompleted) {
 - Tính overdue dựa trên broadcast deadline
 - Sắp xếp phù hợp theo status
 
-**Lịch sử bug:**
+**UI — Admin Dashboard Accordion 3 tầng (21/03/2026):**
+- **Level 1** — Broadcast group: frontend group theo `broadcastId`, hiển thị tên broadcast, tổng chi nhánh, tổng nhân viên, priority badge, deadline. Collapsed mặc định.
+- **Level 2** — StoreTask / Chi nhánh: expand khi click Level 1. Hiển thị storeName, managerName, employeeCount, completionPercent, status badge. Collapsed mặc định.
+- **Level 3** — UserTask / Nhân viên: expand khi click Level 2. Hiển thị employeeName, employeePhone, checklist progress, UserTask status badge. Nút **Sửa** và **Xóa** trên mỗi dòng nhân viên.
+- Auto-refresh 30s chỉ cập nhật KPI numbers — **không re-render task list** (tránh collapse accordion đang mở).
+
+**Lịch sử:**
 - ✅ ĐÃ SỬA 18/03/2026: Thêm trường userTaskId và employeeName
-- ✅ **ENHANCED 20/03/2026:** Thêm employeePhone và employeeBranch cho modal Edit hiển thị thông tin nhân viên hiện tại
+- ✅ ENHANCED 20/03/2026: Thêm employeePhone và employeeBranch
+- ✅ **ENHANCED 21/03/2026:** Đổi findOne → find; thêm `broadcastId`, `userTasks[]`, `employeeCount`; triển khai accordion 3 tầng ở admin dashboard
 
 ### 6.3 Dashboard Manager
 

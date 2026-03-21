@@ -3694,22 +3694,50 @@ Authorization: Bearer {ADMIN_TOKEN}
 ```json
 {
   "success": true,
-  "data": {
-    "tasks": [
-      {
-        "userTaskId": "65fa123456789abcdef00001",
-        "broadcastTitle": "Kiểm tra vệ sinh tháng 3",
-        "employeeId": "65f1234567890abcdef12346",
-        "employeeName": "Nguyễn Văn A",
-        "storeName": "Chi nhánh Quận 1",
-        "status": "in_progress",
-        "progress": 50,
-        "deadline": "2026-03-31T23:59:59.000Z",
-        "daysOverdue": 3
-      }
-    ],
-    "total": 85
-  }
+  "data": [
+    {
+      "_id": "65fa000000000000000stask",
+      "broadcastId": "65fa000000000000000bcast",
+      "broadcastTitle": "Kiểm tra vệ sinh tháng 3",
+      "broadcastDescription": "Vệ sinh toàn bộ khu vực",
+      "storeName": "Chi nhánh Quận 1",
+      "storeAddress": "123 Trần Hưng Đạo",
+      "managerName": "Trần Thị B",
+      "employeeId": "65f1234567890abcdef12346",
+      "employeeName": "Nguyễn Văn A",
+      "employeePhone": "0901234567",
+      "employeeBranch": "Chi nhánh Quận 1",
+      "userTaskId": "65fa123456789abcdef00001",
+      "deadline": "2026-03-31T23:59:59.000Z",
+      "status": "in_progress",
+      "priority": "high",
+      "completionPercent": 50,
+      "createdAt": "2026-03-01T08:00:00.000Z",
+      "employeeCount": 2,
+      "userTasks": [
+        {
+          "userTaskId": "65fa123456789abcdef00001",
+          "employeeId": "65f1234567890abcdef12346",
+          "employeeName": "Nguyễn Văn A",
+          "employeePhone": "0901234567",
+          "employeeBranch": "Chi nhánh Quận 1",
+          "status": "in_progress",
+          "checklistDone": 3,
+          "checklistTotal": 5
+        },
+        {
+          "userTaskId": "65fa123456789abcdef00002",
+          "employeeId": "65f1234567890abcdef12347",
+          "employeeName": "Lê Văn C",
+          "employeePhone": "0912345678",
+          "employeeBranch": "Chi nhánh Quận 1",
+          "status": "assigned",
+          "checklistDone": 0,
+          "checklistTotal": 5
+        }
+      ]
+    }
+  ]
 }
 ```
 
@@ -3725,10 +3753,15 @@ curl -X GET http://localhost:5000/api/dashboard/admin/tasks/overdue \
 ```
 
 **Notes:**
-- ⚠️ Returns `userTaskId` for reassign/delete operations (FIXED March 18, 2026)
-- Status 'pending-confirm' = submitted tasks waiting for manager review
-- Overdue tasks: deadline < current date AND status NOT approved
-- Response includes employee info for quick reassign
+- `broadcastId` — dùng để frontend group StoreTasks cùng Broadcast thành accordion Level 1
+- `userTasks[]` — mảng TẤT CẢ UserTasks của StoreTask (không chỉ người đầu tiên)
+- `employeeCount` — số nhân viên được giao (= userTasks.length)
+- `userTaskId` / `employeeId` / `employeeName` ở root level — nhân viên đầu tiên (backward compat)
+- Status 'pending-confirm' = StoreTasks chờ manager accept (status: pending)
+- Overdue: deadline < current date AND status NOT completed/approved
+- ✅ FIXED 18/03/2026: Thêm userTaskId và employeeName
+- ✅ ENHANCED 20/03/2026: Thêm employeePhone, employeeBranch
+- ✅ **ENHANCED 21/03/2026**: Đổi findOne → find; thêm broadcastId, userTasks[], employeeCount
 
 ---
 

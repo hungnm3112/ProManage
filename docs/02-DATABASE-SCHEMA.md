@@ -502,32 +502,34 @@ assigned → in_progress → submitted → approved
 
 ```javascript
 {
-  userId: ObjectId → Nhan_vien (required) ⚠️
-  
+  userId: ObjectId → Employee (required)
+
   type: String (enum: [
-    'broadcast_published',
-    'task_assigned',
-    'task_submitted',
-    'task_approved',
-    'task_rejected',
-    'store_task_created',
-    'deadline_reminder',
-    'task_overdue'
+    'broadcast_published',   // Admin published a broadcast
+    'task_assigned',         // Manager assigned task to employee
+    'task_submitted',        // Employee submitted task
+    'task_approved',         // Manager approved task
+    'task_rejected',         // Manager rejected task
+    'store_task_created',    // Store task created for manager
+    'deadline_reminder',     // Reminder for upcoming deadline
+    'task_overdue',          // Task is overdue
+    'task_reassigned',       // Admin reassigned task to different employee ✅ ADDED 21/03/2026
+    'task_cancelled'         // Admin deleted/cancelled task              ✅ ADDED 21/03/2026
   ], required)
-  
+
   title: String (required, max 200)
   message: String (required, max 1000)
-  
+
   data: {
     broadcastId: ObjectId → Broadcast
     storeTaskId: ObjectId → StoreTask
     userTaskId: ObjectId → UserTask
-    employeeId: ObjectId → Nhan_vien ⚠️
+    employeeId: ObjectId → Employee
   }
-  
+
   isRead: Boolean (default: false)
   readAt: Date
-  
+
   createdAt: Date (auto)
   updatedAt: Date (auto)
 }
@@ -542,7 +544,8 @@ assigned → in_progress → submitted → approved
 
 #### Methods
 - `markAsRead()` - Mark as read
-- `markAllAsRead()` - Static method (incomplete in file)
+- `markAllAsRead()` - Static method
+- `getUnreadCount(userId)` - Static method
 
 #### Relationships
 - **→ Employee** (userId): Notification recipient
@@ -550,14 +553,10 @@ assigned → in_progress → submitted → approved
 - **→ StoreTask** (data.storeTaskId): Related store task
 - **→ UserTask** (data.userTaskId): Related user task
 
-#### ⚠️ CRITICAL ISSUE
-**Inconsistent refs:** Uses `'Nhan_vien'` instead of `'Employee'`
-- `userId` refs `'Nhan_vien'`
-- `data.employeeId` refs `'Nhan_vien'`
-
-**This will cause errors** because the model is registered as `'Employee'`, not `'Nhan_vien'`.
-
-**Required Fix:** Change all refs from `'Nhan_vien'` to `'Employee'`
+#### ✅ Đã sửa (21/03/2026)
+- **Refs** đã đổi từ `'Nhan_vien'` → `'Employee'` (fixed 19/03/2026)
+- **Enum thiếu** `task_reassigned` và `task_cancelled` gây ValidationError khi admin reassign/delete task (fixed 21/03/2026)
+- **createNotification bug** — hàm nhận positional args `(userId, type, title, message, data)` nhưng adminController gọi sai với object `{}` làm tham số đầu tiên (fixed 21/03/2026)
 
 ---
 

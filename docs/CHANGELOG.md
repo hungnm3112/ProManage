@@ -20,6 +20,36 @@ và project tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [2.2.0] - 2026-03-21
+
+### 🐛 Bug Fixes
+
+#### Admin Controller (`src/controllers/adminController.js`)
+- **Fix:** `notificationService.createNotification` được gọi sai — object `{}` được truyền làm tham số đầu tiên thay vì positional args. Hàm có signature `(userId, type, title, message, data)`. Sửa ở 3 vị trí: notify new employee (reassign), notify old employee (reassign), notify employee (delete/cancel).
+
+#### Notification Model (`src/models/Notification.js`)
+- **Fix:** Thiếu 2 enum values trong trường `type`: `task_reassigned` và `task_cancelled`. Khi adminController gọi createNotification với 2 loại này, Mongoose ValidationError xảy ra. Đã thêm cả 2 vào enum.
+
+#### Admin Dashboard UI (`public/js/admin-dashboard.js`)
+- **Fix:** `canEdit` condition sai — dùng `task.status !== 'approved'` nhưng StoreTask không có status 'approved' (đó là UserTask status), khiến nút Sửa/Xóa luôn hiện ngay cả với completed tasks. Đổi thành `task.status !== 'completed'`.
+- **Fix:** `buildEditRecurringData('onetime')` trả về `{ enabled: false, frequency: 'onetime' }` — `'onetime'` không có trong Broadcast schema enum `['daily','weekly','monthly','yearly']`, gây 400 ValidationError khi lưu. Đổi thành early return `{ enabled: false }`.
+- **Fix:** Auto-refresh `setInterval(loadDashboard, 30000)` gọi `loadDashboard()` mỗi 30s, và `loadDashboard` luôn gọi `loadTaskList('completed')` — reset filter + re-render accordion, collapse hết trạng thái đang mở của user. Sửa: (1) dùng `currentTaskFilter` thay vì hardcode `'completed'`; (2) setInterval chỉ gọi `loadDashboard(false)` để refresh KPI mà không re-render task list.
+
+#### Dashboard View (`src/views/pages/admin/dashboard.ejs`)
+- **Fix:** `errorModal` (z-50) bị che khuất bởi `editTaskDetailsModal` (z-50) vì modal edit được khai báo sau trong DOM, nên stacking order cao hơn ở cùng z-index. Đổi `errorModal` sang `z-[60]`.
+
+### ✨ Enhancements
+
+#### Admin Dashboard Accordion 3 tầng (`public/js/admin-dashboard.js`, `src/controllers/dashboardController.js`)
+- **Backend:** Đổi `UserTask.findOne` → `UserTask.find` trong `getAdminTasksByStatus` để lấy TẤT CẢ nhân viên của mỗi StoreTask. Response thêm `broadcastId`, `userTasks[]` (mảng UserTask với status, checklist progress), `employeeCount`.
+- **Frontend:** Thay thế flat list bằng accordion 3 tầng:
+  - **Level 1** — Broadcast group (collapsed mặc định): group StoreTask theo `broadcastId`, hiển thị tên broadcast, số chi nhánh, số nhân viên, priority, deadline.
+  - **Level 2** — Chi nhánh (collapsed mặc định): storeName, managerName, employeeCount, completionPercent, status badge.
+  - **Level 3** — Nhân viên: employeeName, phone, checklist progress, status badge; nút **Sửa** và **Xóa** per UserTask.
+- Thêm helper `getUserTaskStatusBadge(status)`, hàm `renderAccordionView`, `renderStoreTaskRow`, `renderUserTaskRow`, `attachAccordionListeners`.
+
+---
+
 ## [2.1.0] - 2026-03-20
 
 ### 🎉 Major: Documentation Enhancement Complete

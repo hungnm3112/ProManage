@@ -1,8 +1,8 @@
 # 05 - AUDIT CÁC VẤN ĐỀ ĐÃ BIẾT
 
-**Ngày audit:** 19/03/2026  
-**Cập nhật cuối:** 20/03/2026 (Fixed Monthly Recurring Dropdown UI)  
-**Mục đích:** Ghi chép bugs, workarounds, technical debt + Ready-to-code tasks  
+**Ngày audit:** 19/03/2026
+**Cập nhật cuối:** 21/03/2026 (Fixed Notification bugs, Admin Dashboard Accordion 3 tầng)
+**Mục đích:** Ghi chép bugs, workarounds, technical debt + Ready-to-code tasks
 **Phạm vi:** Toàn bộ codebase
 
 **🆕 NEW SECTION:** Implementation Queue - Tasks với complete specs, ready để implement code
@@ -11,9 +11,9 @@
 
 ## 📊 TỔNG QUAN
 
-**Tổng số vấn đề:** 15
-- ✅ Đã sửa: 5
-- 🚀 Implementation Queue: 5 (Ready to code)
+**Tổng số vấn đề:** 20
+- ✅ Đã sửa: 10
+- 🚀 Implementation Queue: 4 (Ready to code)
 - ⚠️ Known Issues: 5
 - 🔧 Technical Debt: 4
 
@@ -25,6 +25,7 @@
 
 **Implementation Queue Priority:**
 - 🔴 P0 - API Refactoring: 3 tasks (REFACTOR-001, 002, 003) ✅ COMPLETED
+- 🔴 P0 - Admin Dashboard Accordion: 1 task ✅ COMPLETED 21/03/2026
 - 🔴 P1 - Security: 1 task (SECURITY-001)
 - 🟡 P2 - Performance: 1 task (PERF-001)
 
@@ -214,6 +215,174 @@ await StoreTask.findByIdAndUpdate(oldStoreTask, {
 **Documentation:**
 - Tạo persistent memory: `/memories/promanage-readonly-collections.md`
 - Cập nhật audit docs với ⛔ READ-ONLY warnings
+
+---
+
+### 5. Notification createNotification gọi sai args ✅
+
+**Ngày phát hiện:** 21/03/2026
+**Ngày sửa:** 21/03/2026
+**Mức độ:** 🔴 CRITICAL
+
+**Mô tả vấn đề:**
+- File: `src/controllers/adminController.js`
+- Hàm `notificationService.createNotification` có signature positional: `(userId, type, title, message, data)`
+- Nhưng adminController gọi với object `{ userId, type, title, message, data }` làm tham số đầu tiên
+- Kết quả: `userId` nhận cả object → Mongoose `Cast to ObjectId failed`
+
+**Tác động:**
+- Mọi lần admin reassign task → 500 Internal Server Error
+- Mọi lần admin delete task → 500 Internal Server Error
+- Không có notification nào được tạo khi admin thao tác
+
+**Solution:**
+```javascript
+// SAI (cũ):
+await notificationService.createNotification({ userId: newEmployeeId, type: 'task_assigned', ... });
+
+// ĐÚNG (mới):
+await notificationService.createNotification(
+  newEmployeeId, 'task_assigned', 'Task mới được giao',
+  `Bạn được giao task: ${title}`, { userTaskId, broadcastId, employeeId }
+);
+```
+
+**Files đã sửa:**
+- `src/controllers/adminController.js` — 3 vị trí: notify new employee (reassign), notify old employee (reassign), notify employee (delete)
+
+---
+
+### 6. Notification thiếu enum type task_reassigned, task_cancelled ✅
+
+**Ngày phát hiện:** 21/03/2026
+**Ngày sửa:** 21/03/2026
+**Mức độ:** 🔴 CRITICAL
+
+**Mô tả vấn đề:**
+- File: `src/models/Notification.js`
+- adminController gọi `createNotification` với type `'task_reassigned'` và `'task_cancelled'`
+- Nhưng Notification schema enum chỉ có 8 loại, thiếu 2 loại này
+- Mongoose ValidationError: `'task_reassigned' is not a valid enum value`
+
+**Tác động:**
+- Notification không được tạo khi admin reassign/cancel task
+- Kết hợp với bug #5 → double failure khi admin thao tác
+
+**Solution:**
+Thêm 2 enum values vào `Notification.js`:
+```javascript
+'task_reassigned',  // Admin reassigned task to different employee
+'task_cancelled'    // Admin deleted/cancelled task
+```
+
+**Files đã sửa:**
+- `src/models/Notification.js` — trường `type.enum`
+
+---
+
+### 7. errorModal bị che bởi editTaskDetailsModal ✅
+
+**Ngày phát hiện:** 21/03/2026
+**Ngày sửa:** 21/03/2026
+**Mức độ:** 🟢 MEDIUM
+
+**Mô tả vấn đề:**
+- File: `src/views/pages/admin/dashboard.ejs`
+- `errorModal` và `editTaskDetailsModal` đều dùng `z-50`
+- `editTaskDetailsModal` được khai báo sau trong DOM → stacking order cao hơn ở cùng z-index
+- Kết quả: khi admin chọn nhân viên đã có task (400 error), error modal không nhìn thấy
+
+**Solution:**
+```html
+<!-- Đổi errorModal từ z-50 sang z-[60] -->
+<div id="errorModal" class="fixed inset-0 bg-black bg-opacity-50 z-[60] ...">
+```
+
+**Files đã sửa:**
+- `src/views/pages/admin/dashboard.ejs` — line 380, `z-50` → `z-[60]`
+
+---
+
+### 8. canEdit condition sai cho StoreTask ✅
+
+**Ngày phát hiện:** 21/03/2026
+**Ngày sửa:** 21/03/2026
+**Mức độ:** 🟡 HIGH
+
+**Mô tả vấn đề:**
+- File: `public/js/admin-dashboard.js`
+- `canEdit = task.status !== 'approved'`
+- StoreTask không bao giờ có status `'approved'` (đó là UserTask status)
+- Kết quả: điều kiện luôn `true`, nút Sửa/Xóa luôn hiện ngay cả với completed tasks
+
+**Solution:**
+```javascript
+// SAI (cũ):
+const canEdit = task.status !== 'approved';
+
+// ĐÚNG (mới):
+const canEdit = task.status !== 'completed';
+```
+
+**Files đã sửa:**
+- `public/js/admin-dashboard.js`
+
+---
+
+### 9. buildEditRecurringData gửi frequency 'onetime' không hợp lệ ✅
+
+**Ngày phát hiện:** 21/03/2026
+**Ngày sửa:** 21/03/2026
+**Mức độ:** 🟡 HIGH
+
+**Mô tả vấn đề:**
+- File: `public/js/admin-dashboard.js`
+- `buildEditRecurringData('onetime')` trả về `{ enabled: false, frequency: 'onetime' }`
+- Broadcast schema enum chỉ cho phép `['daily','weekly','monthly','yearly']`
+- Khi lưu task có taskType='onetime', request PUT gửi `frequency: 'onetime'` → Mongoose ValidationError → 400
+
+**Solution:**
+```javascript
+function buildEditRecurringData(taskType) {
+  if (taskType === 'onetime') {
+    return { enabled: false }; // Early return, không gửi frequency
+  }
+  // ... xử lý daily/weekly/monthly/yearly
+}
+```
+
+**Files đã sửa:**
+- `public/js/admin-dashboard.js`
+
+---
+
+### 10. Auto-refresh reset accordion state ✅
+
+**Ngày phát hiện:** 21/03/2026
+**Ngày sửa:** 21/03/2026
+**Mức độ:** 🟢 MEDIUM
+
+**Mô tả vấn đề:**
+- File: `public/js/admin-dashboard.js`
+- `setInterval(loadDashboard, 30000)` gọi `loadDashboard()` mỗi 30 giây
+- `loadDashboard()` luôn gọi `loadTaskList('completed')` → re-render toàn bộ task list
+- Kết quả: (1) reset filter về 'completed' nếu user đang xem tab khác; (2) collapse toàn bộ accordion đang mở
+
+**Tác động:**
+- User click "Chưa xác nhận" → mở rộng accordion → ~5-30s sau bị reset về trạng thái ban đầu
+
+**Solution:**
+```javascript
+// 1. loadDashboard dùng currentTaskFilter thay vì hardcode 'completed'
+if (refreshTaskList) loadTaskList(currentTaskFilter);
+
+// 2. setInterval chỉ refresh KPI, không re-render task list
+async function loadDashboard(refreshTaskList = true) { ... }
+setInterval(() => loadDashboard(false), 30000);
+```
+
+**Files đã sửa:**
+- `public/js/admin-dashboard.js`
 
 ---
 

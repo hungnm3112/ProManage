@@ -126,23 +126,23 @@
 
 **Mục tiêu:** Document tất cả bugs đã biết
 
-- [ ] 1.4.1 - Review recent chat history for bugs fixed
-- [ ] 1.4.2 - Scan code for TODO comments
-- [ ] 1.4.3 - Check console.error, console.log statements
-- [ ] 1.4.4 - Review git commit messages for bug fixes
-- [ ] 1.4.5 - List bugs đã biết:
-  - [ ] Reassign task used wrong ID (FIXED March 18)
-  - [ ] Delete task used wrong ID (FIXED March 18)
-  - [ ] UserTask ref 'Nhan_vien' (FIXED March 18)
-  - [ ] Dashboard API missing userTaskId (FIXED March 18)
-  - [ ] Any other bugs?
-- [ ] 1.4.6 - Document workarounds currently in place
-- [ ] 1.4.7 - Write `audit/04-KNOWN-ISSUES-HISTORY.md`
+- [x] 1.4.1 - Review recent chat history for bugs fixed
+- [x] 1.4.2 - Scan code for TODO comments
+- [x] 1.4.3 - Check console.error, console.log statements
+- [x] 1.4.4 - Review git commit messages for bug fixes
+- [x] 1.4.5 - List bugs đã biết:
+  - [x] Reassign task used wrong ID (FIXED March 18)
+  - [x] Delete task used wrong ID (FIXED March 18)
+  - [x] UserTask ref 'Nhan_vien' (FIXED March 18)
+  - [x] Dashboard API missing userTaskId (FIXED March 18)
+  - [x] Any other bugs?
+- [x] 1.4.6 - Document workarounds currently in place
+- [x] 1.4.7 - Write `audit/04-KNOWN-ISSUES-HISTORY.md`
 
 **Test song song:**
-- [ ] Test fixed bugs to confirm they're fixed
-- [ ] Try to find new bugs in UI
-- [ ] Document any new issues found
+- [x] Test fixed bugs to confirm they're fixed
+- [x] Try to find new bugs in UI
+- [x] Document any new issues found
 
 **Output:** `audit/04-KNOWN-ISSUES-HISTORY.md`
 
@@ -152,11 +152,11 @@
 
 **Mục tiêu:** Tổng hợp và review audit
 
-- [ ] 1.5.1 - Review all 4 audit documents
-- [ ] 1.5.2 - Identify major discrepancies
-- [ ] 1.5.3 - Note areas needing immediate attention
-- [ ] 1.5.4 - Create summary: `audit/00-AUDIT-SUMMARY.md`
-- [ ] 1.5.5 - Get approval before Phase 2
+- [x] 1.5.1 - Review all 4 audit documents
+- [x] 1.5.2 - Identify major discrepancies
+- [x] 1.5.3 - Note areas needing immediate attention
+- [x] 1.5.4 - Create summary: `audit/00-AUDIT-SUMMARY.md`
+- [x] 1.5.5 - Get approval before Phase 2
 
 **Output:** `audit/00-AUDIT-SUMMARY.md` + approval to continue
 
@@ -168,25 +168,25 @@
 
 **Mục tiêu:** Di chuyển docs cũ vào archive
 
-- [ ] 2.1.1 - Create `docs/archive/` folder
-- [ ] 2.1.2 - Move old files:
-  - [ ] `mv docs/TODO.md docs/archive/`
-  - [ ] `mv docs/QUICK_REFERENCE.md docs/archive/`
-  - [ ] `mv docs/proposals docs/archive/`
-  - [ ] `mv docs/admin docs/archive/`
-  - [ ] `mv docs/manager docs/archive/`
-  - [ ] `mv docs/employee docs/archive/`
-  - [ ] `mv docs/technical docs/archive/`
-  - [ ] `mv docs/BROADCAST_API.md docs/archive/`
-  - [ ] `mv docs/STORETASK_API.md docs/archive/`
-  - [ ] `mv docs/EMPLOYEE_API.md docs/archive/`
-  - [ ] `mv docs/BRAND_API.md docs/archive/`
-  - [ ] `mv docs/UPLOAD_API.md docs/archive/`
-  - [ ] Keep: README.md, TESTING_GUIDE.md, UI-GUIDELINES.md, DEBUGGING_403.md, ACCOUNT_SWITCHER.md
-- [ ] 2.1.3 - Git commit archive
+- [x] 2.1.1 - Create `docs/archive/` folder
+- [x] 2.1.2 - Move old files:
+  - [x] `mv docs/TODO.md docs/archive/`
+  - [x] `mv docs/QUICK_REFERENCE.md docs/archive/`
+  - [x] `mv docs/proposals docs/archive/`
+  - [x] `mv docs/admin docs/archive/`
+  - [x] `mv docs/manager docs/archive/`
+  - [x] `mv docs/employee docs/archive/`
+  - [x] `mv docs/technical docs/archive/`
+  - [x] `mv docs/BROADCAST_API.md docs/archive/`
+  - [x] `mv docs/STORETASK_API.md docs/archive/`
+  - [x] `mv docs/EMPLOYEE_API.md docs/archive/`
+  - [x] `mv docs/BRAND_API.md docs/archive/`
+  - [x] `mv docs/UPLOAD_API.md docs/archive/`
+  - [x] Keep: README.md, TESTING_GUIDE.md, UI-GUIDELINES.md, DEBUGGING_403.md, ACCOUNT_SWITCHER.md
+- [x] 2.1.3 - Git commit archive
 
 **Test:** 
-- [ ] Verify no broken links in remaining docs
+- [x] Verify no broken links in remaining docs
 
 ---
 
@@ -194,17 +194,17 @@
 
 **Mục tiêu:** Tạo docs structure mới
 
-- [ ] 2.2.1 - Create new files:
-  - [ ] `docs/00-README.md`
-  - [ ] `docs/01-BUSINESS-LOGIC.md`
-  - [ ] `docs/02-DATABASE-SCHEMA.md`
-  - [ ] `docs/03-API-REFERENCE.md`
-  - [ ] `docs/04-IMPLEMENTATION-STATUS.md`
-  - [ ] `docs/05-KNOWN-ISSUES.md`
-  - [ ] `docs/06-DEVELOPMENT-WORKFLOW.md`
-  - [ ] `docs/CHANGELOG.md`
-- [ ] 2.2.2 - Add headers & basic structure to each
-- [ ] 2.2.3 - Git commit initial structure
+- [x] 2.2.1 - Create new files:
+  - [x] `docs/00-README.md`
+  - [x] `docs/01-BUSINESS-LOGIC.md`
+  - [x] `docs/02-DATABASE-SCHEMA.md`
+  - [x] `docs/03-API-REFERENCE.md`
+  - [x] `docs/04-IMPLEMENTATION-STATUS.md`
+  - [x] `docs/05-KNOWN-ISSUES.md`
+  - [x] `docs/06-DEVELOPMENT-WORKFLOW.md`
+  - [x] `docs/CHANGELOG.md`
+- [x] 2.2.2 - Add headers & basic structure to each
+- [x] 2.2.3 - Git commit initial structure
 
 ---
 
@@ -212,15 +212,15 @@
 
 **Mục tiêu:** Viết nội dung cơ bản
 
-- [ ] 2.3.1 - Write `docs/00-README.md`:
+- [x] 2.3.1 - Write `docs/00-README.md`:
   - Navigation to all docs
   - How to use docs
   - Quick start guide
-- [ ] 2.3.2 - Write `docs/06-DEVELOPMENT-WORKFLOW.md`:
+- [x] 2.3.2 - Write `docs/06-DEVELOPMENT-WORKFLOW.md`:
   - Define 6-step workflow (Logic → API → Code → Test → Debug → Update Docs)
   - Rules (never code without MD, etc)
   - Templates for each step
-- [ ] 2.3.3 - Git commit with descriptive message
+- [x] 2.3.3 - Git commit with descriptive message
 
 **Output:** Clean, navigable docs structure
 
