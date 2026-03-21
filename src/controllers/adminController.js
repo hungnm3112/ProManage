@@ -202,30 +202,29 @@ const reassignUserTask = async (req, res) => {
         }
       }
       
-      await notificationService.createNotification({
-        userId: newEmployeeId,
-        type: 'task_assigned',
-        title: 'Task mới được giao',
-        message: `Bạn được giao task: ${userTask.broadcastId.title}`,
-        data: {
+      await notificationService.createNotification(
+        newEmployeeId,
+        'task_assigned',
+        'Task mới được giao',
+        `Bạn được giao task: ${userTask.broadcastId.title}`,
+        {
           userTaskId: userTask._id,
           broadcastId: userTask.broadcastId._id,
           employeeId: newEmployeeId
         }
-      });
-      
-      await notificationService.createNotification({
-        userId: oldEmployee._id,
-        type: 'task_reassigned',
-        title: 'Task đã được chuyển',
-        message: `Task "${userTask.broadcastId.title}" đã được chuyển cho nhân viên khác`,
-        data: {
+      );
+
+      await notificationService.createNotification(
+        oldEmployee._id,
+        'task_reassigned',
+        'Task đã được chuyển',
+        `Task "${userTask.broadcastId.title}" đã được chuyển cho nhân viên khác`,
+        {
           userTaskId: userTask._id,
           broadcastId: userTask.broadcastId._id,
-          oldEmployeeId: oldEmployee._id,
-          newEmployeeId: newEmployeeId
+          employeeId: newEmployeeId
         }
-      });
+      );
       
       reassigned = true;
     }
@@ -334,16 +333,13 @@ const deleteUserTask = async (req, res) => {
     console.log('[Admin/deleteUserTask] Deleted UserTask');
     
     // Create notification for employee (task cancelled)
-    await notificationService.createNotification({
-      userId: employeeId,
-      type: 'task_cancelled',
-      title: 'Task đã bị hủy',
-      message: `Task "${broadcastTitle}" đã bị admin hủy`,
-      data: {
-        userTaskId: id,
-        reason: 'Deleted by admin'
-      }
-    });
+    await notificationService.createNotification(
+      employeeId,
+      'task_cancelled',
+      'Task đã bị hủy',
+      `Task "${broadcastTitle}" đã bị admin hủy`,
+      { userTaskId: id }
+    );
     
     console.log('[Admin/deleteUserTask] Delete successful');
     

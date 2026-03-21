@@ -26,7 +26,9 @@ const notificationSchema = new mongoose.Schema({
       'task_rejected',            // Manager rejected task
       'store_task_created',       // Store task created for manager
       'deadline_reminder',        // Reminder for upcoming deadline
-      'task_overdue'             // Task is overdue
+      'task_overdue',            // Task is overdue
+      'task_reassigned',         // Admin reassigned task to different employee
+      'task_cancelled'           // Admin deleted/cancelled task
     ],
     required: true,
     index: true
