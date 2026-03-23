@@ -298,7 +298,6 @@ async function openTaskDetail(userTaskId, role) {
     }
     renderDetailContent(task, isResponsible, assignedItems || [], fullChecklist);
     renderDetailFooter(task, isResponsible, userTaskId);
-    if (!isResponsible) updateWorkerSubmitState();
     switchModalTab('detail');
 
     // Load message count
@@ -503,24 +502,28 @@ function renderModalChecklist(items, isResponsible, userTaskId, myAssignedItems 
 
   const myItemsHtml = myItems.map(item => {
     const isApproved = item.reviewStatus === 'approved';
-    const preChecked = item.isCompleted || isApproved;
+    const isRejected = item.reviewStatus === 'rejected';
+    const itemIcon = isApproved ? '✅' : isRejected ? '❌' : item.isCompleted ? '⏳' : '⬜';
+    const iconClass = isApproved ? 'text-green-500' : isRejected ? 'text-red-400' : 'text-gray-400';
     let itemBg = 'bg-blue-50 border border-blue-100';
-    if (item.reviewStatus === 'rejected') itemBg = 'bg-red-50 border border-red-200';
+    if (isRejected) itemBg = 'bg-red-50 border border-red-200';
+    else if (isApproved) itemBg = 'bg-green-50 border border-green-100';
+    const canAct = !item.isCompleted || isRejected;
+    const btnLabel = isRejected ? '📤 Nộp lại' : '📤 Nộp item này';
+    const actionHtml = canAct
+      ? `<button onclick="handleSubmitItem('${userTaskId}','${item._id}')" class="text-xs px-2 py-1 bg-purple-50 text-purple-700 rounded hover:bg-purple-100 border border-purple-200 font-medium">${btnLabel}</button>`
+      : renderWorkerItemStatus(item);
     return `
       <div class="flex items-start gap-3 p-3 ${itemBg} rounded-lg" id="checklistItem-${item._id}">
-        <input type="checkbox" class="worker-item-checkbox mt-1 flex-shrink-0 accent-blue-600 w-4 h-4"
-          data-required="${item.required ? 'true' : 'false'}"
-          ${preChecked ? 'checked' : ''}
-          ${isApproved ? 'disabled' : `onchange="trackWorkerItem(this, '${item._id}')"`}>
+        <span class="${iconClass} text-base mt-0.5 flex-shrink-0">${itemIcon}</span>
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-1.5 flex-wrap">
-            <span class="${preChecked ? 'line-through text-gray-400' : 'text-gray-800'} text-sm">${escapeHtml(item.task)}</span>
+            <span class="${isApproved ? 'line-through text-gray-400' : 'text-gray-800'} text-sm">${escapeHtml(item.task)}</span>
             ${item.required ? `<span class="text-xs px-1.5 py-0.5 bg-red-50 text-red-600 rounded font-medium border border-red-100">BẮT BUỘC</span>` : ''}
           </div>
           ${item.note ? `<p class="text-xs text-gray-400 mt-0.5">${escapeHtml(item.note)}</p>` : ''}
-          <div id="checkedIndicator-${item._id}" class="hidden text-xs text-blue-600 mt-0.5">☑ Đã đánh dấu hoàn thành</div>
           <div class="flex items-center gap-2 mt-1.5 flex-wrap review-btn-area">
-            ${renderWorkerItemStatus(item)}
+            ${actionHtml}
           </div>
         </div>
       </div>`;
@@ -561,37 +564,38 @@ function renderModalChecklist(items, isResponsible, userTaskId, myAssignedItems 
   return myItemsHtml + separator + otherItemsHtml;
 }
 
-function trackWorkerItem(checkbox, itemId) {
-  const indicator = document.getElementById('checkedIndicator-' + itemId);
-  if (indicator) indicator.classList.toggle('hidden', !checkbox.checked);
-  updateWorkerSubmitState();
-}
+async function handleSubmitItem(workerUserTaskId, itemId) {
+  const itemEl = document.getElementById(`checklistItem-${itemId}`);
+  const btn = itemEl?.querySelector('.review-btn-area button');
+  if (btn) { btn.disabled = true; btn.textContent = 'Đang nộp...'; }
+  try {
+    const resp = await fetch(`/api/my-tasks/${workerUserTaskId}/submit-item`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ itemId })
+    });
+    const result = await resp.json();
+    if (!result.success) throw new Error(result.message || 'Lỗi nộp item');
 
-function updateWorkerSubmitState() {
-  const allRequired  = document.querySelectorAll('.worker-item-checkbox[data-required="true"]');
-  const doneRequired = document.querySelectorAll('.worker-item-checkbox[data-required="true"]:checked');
-  const total = allRequired.length;
-  const done  = doneRequired.length;
-
-  const info = document.getElementById('workerProgressInfo');
-  if (info) {
-    if (total > 0) {
-      info.textContent = `Đã hoàn thành ${done}/${total} mục bắt buộc`;
-      info.className = done === total
-        ? 'text-xs text-green-600 font-medium flex-1 text-center'
-        : 'text-xs text-orange-500 flex-1 text-center';
-    } else {
-      info.textContent = '';
+    // Cập nhật UI item in-place
+    if (itemEl) {
+      const icon = itemEl.querySelector('span.text-base');
+      if (icon) { icon.textContent = '⏳'; icon.className = 'text-gray-400 text-base mt-0.5 flex-shrink-0'; }
+      const btnArea = itemEl.querySelector('.review-btn-area');
+      if (btnArea) btnArea.innerHTML = `<span class="text-xs text-gray-400 italic">⏳ Chờ duyệt</span>`;
+      itemEl.className = 'flex items-start gap-3 p-3 bg-blue-50 border border-blue-100 rounded-lg';
     }
-  }
 
-  const submitBtn = document.getElementById('workerSubmitBtn');
-  if (submitBtn) {
-    const canSubmit = total === 0 || done === total;
-    submitBtn.disabled = !canSubmit;
-    submitBtn.className = canSubmit
-      ? 'px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-semibold'
-      : 'px-5 py-2 bg-gray-200 text-gray-400 rounded-lg text-sm font-semibold cursor-not-allowed';
+    if (result.data?.workerTaskStatus === 'submitted') {
+      showToast('✅ Đã nộp tất cả! Chờ người phụ trách duyệt.', 'success');
+      closeTaskDetail();
+      loadDashboard();
+    } else {
+      showToast('✅ Đã nộp item thành công', 'success');
+    }
+  } catch (err) {
+    showToast(err.message, 'error');
+    if (btn) { btn.disabled = false; btn.textContent = btn.textContent.includes('lại') ? '📤 Nộp lại' : '📤 Nộp item này'; }
   }
 }
 
@@ -637,11 +641,15 @@ function renderDetailFooter(task, isResponsible, userTaskId) {
       <button onclick="handleConfirmTask('${userTaskId}')"
         class="px-5 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-semibold">✅ Xác nhận đã nhận việc</button>`;
   } else if (['in_progress', 'rejected'].includes(task.status)) {
-    footer.innerHTML = `
-      <button onclick="closeTaskDetail()" class="px-4 py-2 border rounded-lg text-sm text-gray-700 hover:bg-gray-50">Đóng</button>
-      ${!isResponsible ? `<span id="workerProgressInfo" class="text-xs text-gray-500 flex-1 text-center"></span>` : ''}
-      <button id="workerSubmitBtn" onclick="handleUploadAndSubmit('${userTaskId}')"
-        class="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-semibold">📤 Nộp báo cáo</button>`;
+    if (isResponsible) {
+      footer.innerHTML = `
+        <button onclick="closeTaskDetail()" class="px-4 py-2 border rounded-lg text-sm text-gray-700 hover:bg-gray-50">Đóng</button>
+        <button onclick="handleUploadAndSubmit('${userTaskId}')"
+          class="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-semibold">📤 Nộp báo cáo</button>`;
+    } else {
+      footer.innerHTML = `
+        <button onclick="closeTaskDetail()" class="px-4 py-2 border rounded-lg text-sm text-gray-700 hover:bg-gray-50">Đóng</button>`;
+    }
   } else if (task.status === 'submitted') {
     footer.innerHTML = `
       <button onclick="closeTaskDetail()" class="px-4 py-2 border rounded-lg text-sm text-gray-700 hover:bg-gray-50">Đóng</button>

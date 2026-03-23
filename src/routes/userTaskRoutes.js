@@ -117,4 +117,17 @@ router.put(
   userTaskController.reviewChecklistItem
 );
 
+/**
+ * @route   POST /api/my-tasks/:id/submit-item
+ * @desc    Worker nộp 1 checklist item để responsible review (per-item submit)
+ * @access  Private (employee — chỉ worker được giao item)
+ * @body    { itemId: String }
+ */
+router.post(
+  '/:id/submit-item',
+  authenticate,
+  authorize('employee'),
+  userTaskController.submitChecklistItem
+);
+
 module.exports = router;
