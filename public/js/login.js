@@ -82,16 +82,9 @@ loginForm.addEventListener('submit', async (e) => {
       loginBtn.classList.remove('bg-purple-600', 'hover:bg-purple-700');
       loginBtn.classList.add('bg-green-500');
 
-      // Redirect based on role
+      // Redirect to employee dashboard for all roles (Phase P)
       setTimeout(() => {
-        const role = data.employee.role;
-        if (role === 'admin') {
-          window.location.href = '/admin/dashboard';
-        } else if (role === 'manager') {
-          window.location.href = '/manager/dashboard';
-        } else {
-          window.location.href = '/employee/dashboard';
-        }
+        window.location.href = '/employee/dashboard';
       }, 1000);
     } else {
       throw new Error('Invalid response from server');

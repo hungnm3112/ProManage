@@ -96,6 +96,11 @@ const userTaskSchema = new mongoose.Schema({
       type: String,
       required: true
     },
+    // Associate evidence with a specific checklist item (null = task-level)
+    itemId: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: null
+    },
     uploadedAt: {
       type: Date,
       default: Date.now

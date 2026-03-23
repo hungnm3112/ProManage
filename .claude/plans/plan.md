@@ -809,7 +809,8 @@ Code mới (21/3) đã fix cho các assignment tương lai, nhưng data cũ vẫ
 
 ### L-1. src/controllers/dashboardController.js — Auto-heal trong getEmployeeDashboard()
 
-Thêm block **sau** khi build esponsibleStoreTaskIds, **trước** khi query Section 2:
+Thêm block **sau** khi build 
+esponsibleStoreTaskIds, **trước** khi query Section 2:
 
 **Logic:**
 1. Tìm tất cả UserTask có checklist.assignedTo === currentUser._id (dùng multikey index)
@@ -853,3 +854,865 @@ if (targetEmployee.Status === 'Đã nghỉ việc')
 2. Mở chi tiết task → thấy đúng item được giao cho mình (ssignedItems)
 3. Dashboard của người phụ trách không bị ảnh hưởng
 4. Giao item cho nhân viên đã nghỉ việc → hiện lỗi đúng
+
+---
+
+## Phase M — Redesign Employee Task Detail UI
+
+### Bối cảnh
+
+Phases A–L đã implement đầy đủ. `#taskDetailModal` hoạt động nhưng thiếu so với yêu cầu UI2:
+
+| Thiếu sót hiện tại | Mong muốn (UI2) |
+|--------------------|-----------------|
+| Header chỉ có title, không có role badge | `[👑 Phụ trách]` / `[🔧 Thực hiện]` kế title |
+| Không hiển thị "Người giao việc" (admin tạo broadcast) | Section rõ ràng "Người giao: ..." |
+| Không hiển thị "Người phụ trách chính" | Worker thấy được `assignedPersonId.FullName` |
+| Progress bar chỉ trên card, không có trong modal | Progress bar tổng trong modal (cho người phụ trách) |
+| Upload section luôn hiển thị bất kể status | Chỉ show khi `in_progress` / `rejected` |
+| Evidence đã upload chỉ hiện số ("3 ảnh đã tải") | Thumbnail thực tế của ảnh đã upload |
+| Checklist item không có badge "bắt buộc" | Badge `[BẮT BUỘC]` cho `required: true` items |
+| Worker view không có context số item | "Việc được giao (X/Y mục)" trong header checklist |
+
+**Backend:** `getTaskById` trả về `broadcastId.createdBy` và `storeTaskId.assignedPersonId` chưa được populate (chỉ là ObjectId) — cần thêm nested populate.
+
+---
+
+### Files cần sửa (Phase M)
+
+| File | Thay đổi |
+|------|---------|
+| `src/controllers/userTaskController.js` | M-1: thêm nested populate `createdBy` + `assignedPersonId` |
+| `src/views/pages/employee/dashboard.ejs` | M-2: thêm `#detailRoleBadge` span trong modal header |
+| `public/js/employee-dashboard.js` | M-3a, M-3b, M-3c: 3 hàm cập nhật |
+
+---
+
+### M-1. `src/controllers/userTaskController.js` — `getTaskById()` (~line 97–117)
+
+```javascript
+// CŨ:
+.populate({
+  path: 'broadcastId',
+  select: 'title description priority deadline createdBy attachments'
+})
+.populate({
+  path: 'storeTaskId',
+  select: 'status acceptedAt startedAt assignedPersonId assignedEmployees storeId',
+  populate: [
+    { path: 'storeId', select: 'Name Map_Address Phone' },
+    { path: 'assignedEmployees', select: 'FullName Phone' }
+  ]
+})
+
+// MỚI:
+.populate({
+  path: 'broadcastId',
+  select: 'title description priority deadline createdBy attachments',
+  populate: { path: 'createdBy', select: 'FullName' }        // ← thêm
+})
+.populate({
+  path: 'storeTaskId',
+  select: 'status acceptedAt startedAt assignedPersonId assignedEmployees storeId completionRate',
+  populate: [
+    { path: 'storeId', select: 'Name Map_Address Phone' },
+    { path: 'assignedEmployees', select: 'FullName Phone' },
+    { path: 'assignedPersonId', select: 'FullName Phone' }   // ← thêm
+  ]
+})
+```
+
+---
+
+### M-2. `src/views/pages/employee/dashboard.ejs` — modal header (~line 95–100)
+
+```html
+<!-- CŨ: -->
+<div class="flex items-center justify-between p-5 border-b flex-shrink-0">
+  <h3 id="detailModalTitle" class="text-lg font-bold text-gray-900 truncate pr-4"></h3>
+  <button onclick="closeTaskDetail()" ...>...</button>
+</div>
+
+<!-- MỚI: -->
+<div class="flex items-center justify-between p-5 border-b flex-shrink-0">
+  <div class="flex items-center gap-2 min-w-0 flex-1">
+    <h3 id="detailModalTitle" class="text-lg font-bold text-gray-900 truncate"></h3>
+    <span id="detailRoleBadge" class="hidden flex-shrink-0 text-xs px-2 py-0.5 rounded-full font-medium"></span>
+  </div>
+  <button onclick="closeTaskDetail()" class="text-gray-400 hover:text-gray-600 flex-shrink-0 ml-3">
+    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+    </svg>
+  </button>
+</div>
+```
+
+---
+
+### M-3a. `public/js/employee-dashboard.js` — `openTaskDetail()` (~line 272)
+
+Sau khi set `detailModalTitle.textContent`, thêm:
+
+```javascript
+// Set role badge
+const badge = document.getElementById('detailRoleBadge');
+if (badge) {
+  badge.className = isResponsible
+    ? 'flex-shrink-0 text-xs px-2 py-0.5 rounded-full font-medium bg-purple-100 text-purple-700'
+    : 'flex-shrink-0 text-xs px-2 py-0.5 rounded-full font-medium bg-green-100 text-green-700';
+  badge.textContent = isResponsible ? '👑 Phụ trách' : '🔧 Thực hiện';
+  badge.classList.remove('hidden');
+}
+```
+
+Trong `closeTaskDetail()`, thêm reset badge:
+```javascript
+const badge = document.getElementById('detailRoleBadge');
+if (badge) badge.classList.add('hidden');
+```
+
+---
+
+### M-3b. `public/js/employee-dashboard.js` — `renderDetailContent()` (~line 345) — thay toàn bộ
+
+```javascript
+function renderDetailContent(task, isResponsible, assignedItems) {
+  const broadcast = task.broadcastId || {};
+  const storeTask = task.storeTaskId || {};
+  const storeInfo = storeTask.storeId || {};
+  const checklist = task.checklist || [];
+  const evidences = task.evidences || [];
+  const itemsToRender = isResponsible ? checklist : assignedItems;
+
+  const creatorName        = broadcast.createdBy?.FullName || 'Admin';
+  const storeName          = storeInfo.Name || '';
+  const assignedPersonName = storeTask.assignedPersonId?.FullName || '';
+
+  // ── Info block ─────────────────────────────────────────────────
+  const infoHtml = `
+    <div class="bg-gray-50 rounded-xl p-4 space-y-2 mb-4 text-sm">
+      <div class="flex flex-wrap gap-x-6 gap-y-1">
+        <span class="text-gray-500">👤 Người giao:
+          <span class="font-medium text-gray-800">${escapeHtml(creatorName)}</span>
+        </span>
+        ${!isResponsible && assignedPersonName
+          ? `<span class="text-gray-500">👑 Phụ trách:
+               <span class="font-medium text-gray-800">${escapeHtml(assignedPersonName)}</span>
+             </span>`
+          : ''}
+        ${storeName
+          ? `<span class="text-gray-500">🏪 Chi nhánh:
+               <span class="font-medium text-gray-800">${escapeHtml(storeName)}</span>
+             </span>`
+          : ''}
+      </div>
+      <div class="flex flex-wrap items-center gap-3">
+        ${broadcast.deadline ? `<span>📅 Hạn: ${formatDeadline(broadcast.deadline)}</span>` : ''}
+        ${broadcast.priority ? priorityBadge(broadcast.priority) : ''}
+        ${statusBadge(task.status)}
+      </div>
+      ${isResponsible ? `
+      <div>
+        <div class="flex justify-between text-xs text-gray-500 mb-1">
+          <span>📊 Tiến độ tổng</span>
+          <span class="font-medium">${storeTask.completionRate || 0}%</span>
+        </div>
+        <div class="w-full bg-gray-200 rounded-full h-2">
+          <div class="bg-purple-500 h-2 rounded-full transition-all"
+               style="width: ${storeTask.completionRate || 0}%"></div>
+        </div>
+      </div>` : ''}
+      ${broadcast.description
+        ? `<p class="text-gray-600 text-sm pt-1 border-t border-gray-200">
+             ${escapeHtml(broadcast.description)}
+           </p>`
+        : ''}
+    </div>`;
+
+  // ── Checklist ───────────────────────────────────────────────────
+  let checklistHtml = '';
+  if (itemsToRender.length > 0) {
+    const sectionLabel = isResponsible
+      ? `📋 Checklist <span class="text-gray-400 font-normal text-xs">(${checklist.length} mục)</span>`
+      : `📌 Việc được giao <span class="text-gray-400 font-normal text-xs">(${assignedItems.length}/${checklist.length || '?'} mục)</span>`;
+    checklistHtml = `
+      <div class="mb-4">
+        <h4 class="font-semibold text-gray-800 mb-3 text-sm">${sectionLabel}</h4>
+        <div id="modalChecklistItems" class="space-y-2">
+          ${renderModalChecklist(itemsToRender, isResponsible, task._id)}
+        </div>
+      </div>`;
+  }
+
+  // ── Upload / Evidence ───────────────────────────────────────────
+  const canUpload        = ['in_progress', 'rejected'].includes(task.status);
+  const showReadOnlyEvid = ['submitted', 'approved'].includes(task.status) && evidences.length > 0;
+
+  let uploadHtml = '';
+  if (canUpload) {
+    const thumbs = evidences.length > 0
+      ? `<div class="flex flex-wrap gap-2 mt-2">
+           ${evidences.map(e => `<img src="${e.url}" alt="evidence"
+             class="w-16 h-16 object-cover rounded-lg border border-gray-200 cursor-pointer"
+             onclick="window.open('${e.url}','_blank')">`).join('')}
+         </div>
+         <p class="text-xs text-gray-400 mt-1">${evidences.length} ảnh đã tải — thêm ảnh mới bên dưới</p>`
+      : '';
+    uploadHtml = `
+      <div class="mb-2">
+        <h4 class="font-semibold text-gray-800 mb-2 text-sm">📷 Ảnh báo cáo</h4>
+        ${thumbs}
+        <input type="file" id="evidenceInput" accept="image/*" multiple
+          class="block mt-2 text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded
+                 file:border-0 file:text-sm file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100">
+        <div id="evidencePreviews" class="flex flex-wrap gap-2 mt-2"></div>
+      </div>`;
+  } else if (showReadOnlyEvid) {
+    uploadHtml = `
+      <div class="mb-2">
+        <h4 class="font-semibold text-gray-800 mb-2 text-sm">📷 Ảnh báo cáo đã nộp</h4>
+        <div class="flex flex-wrap gap-2">
+          ${evidences.map(e => `<img src="${e.url}" alt="evidence"
+            class="w-16 h-16 object-cover rounded-lg border border-gray-200 cursor-pointer"
+            onclick="window.open('${e.url}','_blank')">`).join('')}
+        </div>
+      </div>`;
+  }
+
+  document.getElementById('taskDetailContent').innerHTML = infoHtml + checklistHtml + uploadHtml;
+  if (canUpload) {
+    document.getElementById('evidenceInput')?.addEventListener('change', handleEvidencePreview);
+  }
+}
+```
+
+---
+
+### M-3c. `public/js/employee-dashboard.js` — `renderModalChecklist()` (~line 385) — thêm required badge
+
+Chỉ thay đổi phần render text item:
+
+```javascript
+// CŨ (trong renderModalChecklist, phần render item text):
+<span class="${item.isCompleted ? 'line-through text-gray-400' : 'text-gray-800'} text-sm">
+  ${escapeHtml(item.task)}
+</span>
+
+// MỚI:
+<div class="flex items-center gap-1.5 flex-wrap">
+  <span class="${item.isCompleted ? 'line-through text-gray-400' : 'text-gray-800'} text-sm">
+    ${escapeHtml(item.task)}
+  </span>
+  ${item.required
+    ? `<span class="text-xs px-1.5 py-0.5 bg-red-50 text-red-600 rounded font-medium border border-red-100">BẮT BUỘC</span>`
+    : ''}
+</div>
+```
+
+---
+
+### Layout tổng thể sau redesign
+
+```
+┌──────────────────────────────────────────────┐
+│  [Tên broadcast]     [👑 Phụ trách]      ✕   │  ← role badge trong header
+├──────────────────────────────────────────────┤
+│  📋 Chi tiết  │  💬 Tin nhắn (3)             │
+├──────────────────────────────────────────────┤
+│  ┌──────────────────────────────────────┐    │
+│  │ 👤 Người giao: Admin X               │    │  ← MỚI
+│  │ 👑 Phụ trách: Nguyễn A (chỉ worker)  │    │  ← MỚI
+│  │ 🏪 Chi nhánh: Store ABC              │    │
+│  │ 📅 Hạn: 25/03  🔴 Khẩn  ⚡ Mới giao │    │
+│  │ 📊 Tiến độ (chỉ phụ trách):          │    │  ← MỚI
+│  │   ████████░░  75%                    │    │
+│  │ Mô tả: ...                           │    │
+│  └──────────────────────────────────────┘    │
+│                                              │
+│  📋 Checklist (4 mục)                        │
+│  ⬜ [BẮT BUỘC] Item 1   [👤 Giao]           │  ← badge MỚI
+│  ✅ Item 2  👤 Nguyễn A  [⏳ Chờ hoàn thành]│
+│  ✅ Item 3  👤 Trần B    [✅ OK][❌ Không OK]│
+│  ⬜ Item 4 (không bắt buộc)  [👤 Giao]      │
+│                                              │
+│  📷 Ảnh báo cáo (CHỈ khi in_progress)       │  ← ẩn khi assigned/submitted
+│  [img1][img2]  ← thumbnails thực tế          │  ← MỚI
+│  [+ Chọn ảnh mới]                            │
+├──────────────────────────────────────────────┤
+│  [Đóng]   [✅ Xác nhận nhận việc]           │  ← status=assigned
+│  [Đóng]   [📤 Nộp báo cáo]                  │  ← status=in_progress
+│  [Đóng]   [⏳ Đã nộp — chờ duyệt] (disabled)│  ← status=submitted
+└──────────────────────────────────────────────┘
+```
+
+---
+
+### Verification Phase M
+
+1. **Role badge**: Task "Phụ trách" → header hiện `👑 Phụ trách` tím. Task "Thực hiện" → `🔧 Thực hiện` xanh lá.
+2. **Người giao**: Info block hiển thị đúng tên admin tạo broadcast (`broadcast.createdBy.FullName`).
+3. **Worker thấy Phụ trách chính**: Role "Thực hiện" → thấy "👑 Phụ trách: [Tên NV]".
+4. **Progress bar**: Người phụ trách mở modal → progress bar với % từ `storeTask.completionRate`.
+5. **Upload ẩn khi 'assigned'**: Status `assigned` → KHÔNG có section upload.
+6. **Upload hiện khi 'in_progress'**: Status `in_progress` → thấy upload + thumbnails ảnh cũ.
+7. **Evidence thumbnails**: Task có ảnh → hiện thumbnail, click → mở tab mới.
+8. **Badge BẮT BUỘC**: Item `required: true` → badge đỏ `[BẮT BUỘC]`.
+9. **Reset badge khi đóng**: Đóng modal → mở task khác → badge đúng role mới (không bị cache).
+10. **Worker context**: Role "Thực hiện" → header checklist hiện "Việc được giao (2/5 mục)".
+
+---
+
+## Phase N — Fix Bug: Review/Submit Flow
+
+### Bối cảnh
+
+Sau khi implement Phase M, phát hiện 2 bug khi test thực tế:
+
+- **Bug 1**: Người phụ trách reject item của worker → tiến độ vẫn tính 33% (không giảm)
+- **Bug 2**: Worker bị reject → không thể báo cáo lại (button bị disabled "Đã nộp — chờ duyệt")
+
+### Root cause
+
+**Bug 1** — `reviewChecklistItem()` trong `userTaskController.js`:
+Khi `action === 'approve'`, set `isCompleted = true`. Nhưng khi `action === 'reject'`, KHÔNG reset `isCompleted = false`. Vì vậy `calculateCompletionRate()` trong `StoreTask.js` vẫn đếm item đó là hoàn thành.
+
+**Bug 2** — Cùng hàm `reviewChecklistItem()`:
+Khi reject, không reset `workerTask.status` từ `submitted` về `in_progress`. Kết quả là `renderDetailFooter()` trên frontend kiểm tra `task.status === 'submitted'` → hiển thị button disabled "Đã nộp — chờ duyệt" → worker không nộp lại được.
+
+Ngoài ra `canSubmit()` trong `UserTask.js` chỉ cho phép `['assigned', 'in_progress']` — không có `'rejected'` — nên cần thêm phòng thủ. Và khi worker nộp lại, `submitTask()` cần reset `reviewStatus = null` trên item của responsible để responsible có thể review lại.
+
+---
+
+### Files cần sửa
+
+| File | Thay đổi |
+|------|---------|
+| `src/controllers/userTaskController.js` | Fix `reviewChecklistItem()` + `submitTask()` |
+| `src/models/UserTask.js` | Fix `canSubmit()` whitelist |
+
+---
+
+### N-1 — Fix `reviewChecklistItem()`: reset isCompleted khi reject
+
+**File**: `src/controllers/userTaskController.js`
+**Vị trí**: trong hàm `reviewChecklistItem()`, đoạn set `isCompleted`
+
+```javascript
+// CŨ:
+if (action === 'approve') {
+  checklistItem.isCompleted = true;
+  checklistItem.completedAt = new Date();
+}
+
+// MỚI:
+if (action === 'approve') {
+  checklistItem.isCompleted = true;
+  checklistItem.completedAt = new Date();
+} else {
+  checklistItem.isCompleted = false;  // reset → tiến độ giảm
+  checklistItem.completedAt = null;
+}
+```
+
+---
+
+### N-2a — Fix `reviewChecklistItem()`: reset workerTask.status khi reject
+
+**File**: `src/controllers/userTaskController.js`
+**Vị trí**: trong `reviewChecklistItem()`, sau `await userTask.save()`
+
+Thêm đoạn code sau `await userTask.save()`:
+
+```javascript
+// Reset worker's task status when responsible rejects an item
+if (action === 'reject' && checklistItem.assignedTo) {
+  const storeTaskRef = userTask.storeTaskId._id || userTask.storeTaskId;
+  const workerTask = await UserTask.findOne({
+    storeTaskId: storeTaskRef,
+    employeeId: checklistItem.assignedTo
+  });
+  if (workerTask && workerTask.status === 'submitted') {
+    workerTask.status = 'in_progress';
+    await workerTask.save();
+  }
+}
+```
+
+---
+
+### N-2b — Fix `canSubmit()`: thêm 'rejected' vào whitelist
+
+**File**: `src/models/UserTask.js`
+**Vị trí**: hàm `canSubmit()` (~line 187)
+
+```javascript
+// CŨ:
+if (!['assigned', 'in_progress'].includes(this.status)) {
+
+// MỚI:
+if (!['assigned', 'in_progress', 'rejected'].includes(this.status)) {
+```
+
+---
+
+### N-2c — Fix `submitTask()`: reset reviewStatus khi worker nộp lại
+
+**File**: `src/controllers/userTaskController.js`
+**Vị trí**: trong `submitTask()`, đoạn `forEach` update checklist items của responsible
+
+```javascript
+// CŨ:
+assignedPersonTask.checklist.forEach(item => {
+  if (item.assignedTo?.toString() === currentUser._id.toString() && !item.isCompleted) {
+    item.isCompleted = true;
+    item.completedAt = new Date();
+    itemsMarked = true;
+  }
+});
+
+// MỚI:
+assignedPersonTask.checklist.forEach(item => {
+  if (item.assignedTo?.toString() === currentUser._id.toString() && !item.isCompleted) {
+    item.isCompleted = true;
+    item.completedAt = new Date();
+    item.reviewStatus = null;    // reset để responsible có thể review lại
+    item.reviewNote = '';
+    item.reviewedAt = null;
+    item.reviewedBy = null;
+    itemsMarked = true;
+  }
+});
+```
+
+---
+
+### Verification Phase N
+
+1. **Bug 1 fix**: Responsible reject item của worker → tiến độ giảm (không còn tính item rejected).
+2. **Bug 2 fix — button**: Worker bị reject → reload dashboard → button hiện "📤 Nộp báo cáo" (không bị disabled).
+3. **Bug 2 fix — submit lại**: Worker nộp báo cáo lại → responsible nhận được notification/review mới.
+4. **Re-review flow**: Sau khi worker nộp lại, responsible mở task → item đã reset reviewStatus → có thể approve/reject lại.
+5. **Tiến độ chính xác**: Approve → tiến độ tăng. Reject → tiến độ giảm. Re-submit + approve → tăng đúng.
+6. **canSubmit defensive**: Worker với status `rejected` vẫn có thể submit (không bị block bởi `canSubmit()`).
+7. **Không ảnh hưởng flow khác**: Task `assigned` → `in_progress` → `submitted` → `approved` flow vẫn hoạt động bình thường.
+
+---
+
+## Phase O — Per-item Submit cho Worker
+
+### Bối cảnh
+
+`submitTask()` hiện mark **toàn bộ** item của worker là `isCompleted = true` khi submit, bất kể worker có thực sự tick hay chưa. Checkbox chỉ là UI local state, không lưu server. Cần chuyển sang **per-item submit**: worker nộp từng item khi làm xong, responsible review từng item ngay khi nhận được.
+
+### Trạng thái item sau Phase O
+
+| isCompleted | reviewStatus | Hiển thị với worker |
+|-------------|-------------|----------------------|
+| `false` | `null` | `[📤 Nộp item này]` |
+| `true` | `null` | `⏳ Chờ duyệt` |
+| `true` | `'approved'` | `✅ Đã duyệt` |
+| `false` | `'rejected'` | `❌ Bị từ chối + note + [📤 Nộp lại]` |
+
+### Files cần sửa
+
+| File | Thay đổi |
+|------|---------|
+| `src/controllers/userTaskController.js` | Thêm handler `submitChecklistItem()` + sửa `submitTask()` |
+| `src/routes/userTaskRoutes.js` | Thêm route `POST /:id/submit-item` |
+| `public/js/employee-dashboard.js` | Sửa `renderModalChecklist()`, `renderDetailFooter()`, thêm `handleSubmitItem()` |
+
+---
+
+### O-1 — Backend: Handler `submitChecklistItem()`
+
+**File**: `src/controllers/userTaskController.js`
+
+Thêm hàm mới trước `module.exports`:
+
+```js
+const submitChecklistItem = async (req, res) => {
+  try {
+    const { id } = req.params;   // worker's UserTask._id
+    const { itemId } = req.body;
+    const currentUser = req.user;
+
+    if (!itemId) return sendError(res, 'itemId là bắt buộc', 400);
+
+    const workerTask = await UserTask.findById(id).populate('storeTaskId');
+    if (!workerTask) return sendError(res, 'Không tìm thấy UserTask', 404);
+    if (workerTask.employeeId.toString() !== currentUser._id.toString())
+      return sendError(res, 'Unauthorized', 403);
+    if (!['in_progress', 'rejected'].includes(workerTask.status))
+      return sendError(res, 'Không thể nộp ở trạng thái hiện tại', 400);
+
+    const storeTask = workerTask.storeTaskId;
+    const responsibleUserTasks = await UserTask.find({
+      storeTaskId: storeTask._id,
+      employeeId: { $in: storeTask.assignedEmployees }
+    });
+
+    let targetItem = null;
+    let responsibleTask = null;
+    for (const rt of responsibleUserTasks) {
+      const item = rt.checklist.id(itemId);
+      if (item && item.assignedTo?.toString() === currentUser._id.toString()) {
+        targetItem = item;
+        responsibleTask = rt;
+        break;
+      }
+    }
+    if (!targetItem)
+      return sendError(res, 'Không tìm thấy item hoặc bạn không được giao item này', 404);
+    if (targetItem.reviewStatus === 'approved')
+      return sendError(res, 'Item này đã được duyệt rồi', 400);
+
+    // Mark item submitted, reset review state để responsible review lại
+    targetItem.isCompleted  = true;
+    targetItem.completedAt  = new Date();
+    targetItem.reviewStatus = null;
+    targetItem.reviewNote   = '';
+    targetItem.reviewedAt   = null;
+    targetItem.reviewedBy   = null;
+    await responsibleTask.save();
+
+    await storeTask.updateCompletionRate();
+
+    // Kiểm tra TẤT CẢ item của worker đã submitted chưa
+    let allSubmitted = true;
+    for (const rt of responsibleUserTasks) {
+      const workerItems = rt.checklist.filter(
+        item => item.assignedTo?.toString() === currentUser._id.toString()
+      );
+      if (workerItems.some(wi => !wi.isCompleted && wi.reviewStatus !== 'approved')) {
+        allSubmitted = false;
+        break;
+      }
+    }
+
+    if (allSubmitted && workerTask.status !== 'submitted') {
+      workerTask.status      = 'submitted';
+      workerTask.submittedAt = new Date();
+      await workerTask.save();
+    }
+
+    // Notify responsible
+    try {
+      const Broadcast = require('../models/Broadcast');
+      const broadcast = await Broadcast.findById(workerTask.broadcastId).select('title');
+      await notificationService.createNotification({
+        recipientId: responsibleTask.employeeId,
+        type: 'checklist_item_submitted',
+        title: 'Nhân viên đã nộp công việc',
+        message: '"' + targetItem.task + '" trong task "' + (broadcast?.title || '') +
+                 '" đã được nộp bởi ' + currentUser.FullName,
+        relatedId: responsibleTask._id,
+        relatedModel: 'UserTask'
+      });
+    } catch (notifErr) {
+      console.error('submitChecklistItem notification error:', notifErr.message);
+    }
+
+    return sendSuccess(res, 'Đã nộp item thành công', {
+      itemId,
+      allSubmitted,
+      workerStatus: workerTask.status,
+      storeTaskCompletionRate: storeTask.completionRate
+    });
+  } catch (error) {
+    console.error('submitChecklistItem error:', error);
+    return sendError(res, error.message, 500);
+  }
+};
+```
+
+Thêm `submitChecklistItem` vào `module.exports`.
+
+---
+
+### O-2 — Backend: Sửa `submitTask()` — xóa block mark worker items
+
+**File**: `src/controllers/userTaskController.js`
+
+Xóa toàn bộ block comment `// Worker submission: mark their assigned checklist items as done...` (~line 373–396). Block này không còn cần thiết vì per-item submit đã xử lý.
+
+---
+
+### O-3 — Route
+
+**File**: `src/routes/userTaskRoutes.js`
+
+Thêm sau route `/:id/submit`:
+
+```js
+router.post(
+  '/:id/submit-item',
+  authenticate,
+  authorize('employee'),
+  userTaskController.submitChecklistItem
+);
+```
+
+---
+
+### O-4 — Frontend: Worker item — thay checkbox bằng nút Submit per-item
+
+**File**: `public/js/employee-dashboard.js`
+**Vị trí**: hàm `renderModalChecklist()`, block `myItemsHtml`
+
+Với mỗi item của worker (trong vòng `myItems.map`), thay:
+- Xóa `<input type="checkbox" class="worker-item-checkbox" ...>`
+- Thay bằng icon text: `✅ / ❌ / ⏳ / ⬜`
+- Thay `renderWorkerItemStatus(item)` bằng nút submit per-item:
+
+```js
+const itemIcon = item.reviewStatus === 'approved' ? '✅'
+               : item.reviewStatus === 'rejected'  ? '❌'
+               : item.isCompleted                  ? '⏳'
+               : '⬜';
+
+const canAct   = !item.isCompleted || item.reviewStatus === 'rejected';
+const btnLabel = item.reviewStatus === 'rejected' ? '📤 Nộp lại' : '📤 Nộp item này';
+const actionHtml = canAct
+  ? '<button onclick="handleSubmitItem(\'' + userTaskId + '\',\'' + item._id + '\')" ' +
+    'class="text-xs px-2 py-1 bg-purple-50 text-purple-700 rounded hover:bg-purple-100 ' +
+    'border border-purple-200 font-medium">' + btnLabel + '</button>'
+  : renderWorkerItemStatus(item);
+```
+
+---
+
+### O-5 — Frontend: `renderDetailFooter()` — bỏ nút Nộp tổng với worker
+
+**File**: `public/js/employee-dashboard.js`
+
+Trong block `['in_progress', 'rejected'].includes(task.status)`, tách riêng responsible và worker:
+
+```js
+// CŨ: cả 2 đều có nút Nộp báo cáo
+// MỚI:
+if (isResponsible) {
+  footer.innerHTML = `
+    <button onclick="closeTaskDetail()" class="px-4 py-2 border rounded-lg text-sm text-gray-700 hover:bg-gray-50">Đóng</button>
+    <button onclick="handleUploadAndSubmit('${userTaskId}')"
+      class="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-semibold">📤 Nộp báo cáo</button>`;
+} else {
+  // Worker: nộp từng item ở trên, footer chỉ có Đóng
+  footer.innerHTML = `
+    <button onclick="closeTaskDetail()" class="px-4 py-2 border rounded-lg text-sm text-gray-700 hover:bg-gray-50">Đóng</button>`;
+}
+```
+
+---
+
+### O-6 — Frontend: Thêm `handleSubmitItem()`
+
+**File**: `public/js/employee-dashboard.js`
+**Vị trí**: cạnh `handleReviewItem()`
+
+```js
+async function handleSubmitItem(workerUserTaskId, itemId) {
+  try {
+    const resp = await fetch('/api/my-tasks/' + workerUserTaskId + '/submit-item', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ itemId })
+    });
+    const result = await resp.json();
+    if (!result.success) throw new Error(result.message || 'Lỗi khi nộp item');
+
+    showToast('✅ Đã nộp item thành công!', 'success');
+    if (result.data?.allSubmitted) {
+      showToast('🎉 Đã nộp tất cả — chờ người phụ trách duyệt', 'success');
+    }
+    await openTaskDetail(workerUserTaskId);
+    loadDashboard();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+```
+
+---
+
+### Verification Phase O
+
+1. **Per-item button**: Worker mở task → mỗi item chưa nộp có nút `[📤 Nộp item này]`.
+2. **Submit 1 item**: Click nộp → item chuyển icon ⏳, nút biến mất.
+3. **Partial submit**: Worker nộp 1/2 item → task status vẫn `in_progress` → dashboard không đổi.
+4. **All submitted**: Worker nộp đủ → task status `submitted` → badge "Đã nộp" trên dashboard.
+5. **Responsible nhận ngay**: Responsible mở task → item vừa nộp hiện `[✅ OK] [❌ Không OK]`.
+6. **Reject + Nộp lại**: Responsible reject → worker thấy `❌ Bị từ chối + [📤 Nộp lại]` → click → reset.
+7. **Tiến độ tổng**: completionRate tăng sau mỗi lần approve.
+8. **Bỏ nút Nộp tổng**: Worker view footer chỉ có nút "Đóng".
+9. **Responsible không ảnh hưởng**: Responsible view vẫn có `[📤 Nộp báo cáo]`.
+
+---
+
+## Phase P — Admin Access từ Employee Dashboard
+
+### Mục tiêu
+
+Admin login vào hệ thống → mặc định vào **employee dashboard** (không phải admin dashboard) → header có nút **"Quản trị"** để chuyển sang admin dashboard khi cần.
+
+**Business Logic**:
+- Admin cũng là employee trong hệ thống (có tasks cá nhân)
+- Mặc định landing page là employee dashboard để xem công việc của mình
+- Khi cần quản trị (tạo broadcast, xem báo cáo) → click nút "Quản trị" để switch
+
+---
+
+### P-1 — Backend: Sửa Login Redirect Logic
+
+**File**: `src/controllers/authController.js`
+**Method**: `loginWithEmployeeData()` hoặc login success handler
+
+**Hiện tại** (giả định):
+```js
+// Nếu admin → redirect về /admin
+if (employee.ID_GroupUser?.Name === 'admin') {
+  return res.redirect('/admin');
+}
+// Nếu không phải admin → redirect về /dashboard
+return res.redirect('/dashboard');
+```
+
+**Thay đổi**:
+```js
+// TẤT CẢ user (admin, manager, employee) đều redirect về employee dashboard
+return res.redirect('/dashboard');
+```
+
+**Lý do**: Admin cũng cần xem tasks cá nhân trước, không tự động vào admin view.
+
+---
+
+### P-2 — Backend: Pass User Role vào View
+
+**File**: `src/controllers/dashboardController.js`
+**Method**: `getEmployeeDashboard()` hoặc render dashboard
+
+**Đảm bảo**:
+```js
+res.render('pages/employee-dashboard', {
+  title: 'Bảng công việc',
+  user: req.user, // Hoặc { ...req.user, role: req.user.role }
+  // ... other data
+});
+```
+
+**Lưu ý**: `req.user.role` phải có sẵn từ JWT middleware (`authMiddleware.verifyToken()`).
+
+---
+
+### P-3 — Frontend: Thêm Nút "Quản trị" vào Header
+
+**File**: `src/views/pages/employee-dashboard.ejs` (hoặc `src/views/layouts/main.ejs` nếu header là layout)
+**Vị trí**: Header, bên cạnh nút "Hướng dẫn"
+
+**Hiện tại** (giả định):
+```html
+<header class="flex justify-between items-center mb-6">
+  <h1 class="text-2xl font-bold">Bảng công việc</h1>
+  <div>
+    <button id="btn-user-guide" class="px-4 py-2 bg-blue-500 text-white rounded">Hướng dẫn</button>
+  </div>
+</header>
+```
+
+**Thay đổi**:
+```html
+<header class="flex justify-between items-center mb-6">
+  <h1 class="text-2xl font-bold">Bảng công việc</h1>
+  <div class="flex gap-2">
+    <% if (user && user.role === 'admin') { %>
+      <button id="btn-admin-access" class="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700">
+        <i class="fas fa-cog mr-1"></i> Quản trị
+      </button>
+    <% } %>
+    <button id="btn-user-guide" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">Hướng dẫn</button>
+  </div>
+</header>
+```
+
+**Notes**:
+- Conditional render: chỉ hiện nút khi `user.role === 'admin'`
+- Style: màu tím (`purple-600`) để phân biệt với nút xanh "Hướng dẫn"
+- Icon: `fa-cog` (FontAwesome) để biểu thị quản trị
+
+---
+
+### P-4 — Frontend: Thêm Navigation Handler
+
+**File**: `public/js/employee-dashboard.js`
+**Vị trí**: Trong `initApp()` hoặc sau khi DOM loaded
+
+**Thêm event listener**:
+```js
+// Event listener cho nút "Quản trị"
+const btnAdminAccess = document.getElementById('btn-admin-access');
+if (btnAdminAccess) {
+  btnAdminAccess.addEventListener('click', () => {
+    window.location.href = '/admin';
+  });
+}
+```
+
+**Lý do**: Simple redirect, không cần AJAX vì đổi context hoàn toàn.
+
+---
+
+### P-5 — (Optional) Admin Dashboard: Thêm Nút "Công việc của tôi"
+
+**Mục tiêu**: Cho phép admin quay lại employee dashboard từ admin view.
+
+**File**: `src/views/pages/admin-dashboard.ejs` (hoặc admin layout)
+**Vị trí**: Header admin dashboard
+
+**Thêm**:
+```html
+<div class="flex gap-2">
+  <button id="btn-employee-view" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
+    <i class="fas fa-tasks mr-1"></i> Công việc của tôi
+  </button>
+  <!-- Other admin buttons -->
+</div>
+```
+
+**File**: `public/js/admin-dashboard.js`
+**Thêm handler**:
+```js
+const btnEmployeeView = document.getElementById('btn-employee-view');
+if (btnEmployeeView) {
+  btnEmployeeView.addEventListener('click', () => {
+    window.location.href = '/dashboard';
+  });
+}
+```
+
+**Lưu ý**: Đây là optional enhancement, không bắt buộc cho Phase P.
+
+---
+
+### Files to Modify
+
+1. **`src/controllers/authController.js`** - Sửa login redirect (tất cả về `/dashboard`)
+2. **`src/controllers/dashboardController.js`** - Đảm bảo pass `user.role` vào view
+3. **`src/views/pages/employee-dashboard.ejs`** - Thêm nút "Quản trị" với conditional render
+4. **`public/js/employee-dashboard.js`** - Thêm click handler cho nút "Quản trị"
+5. **(Optional)** `src/views/pages/admin-dashboard.ejs` + `public/js/admin-dashboard.js` - Thêm nút "Công việc của tôi"
+
+---
+
+### Verification Phase P
+
+1. **Admin login → Employee dashboard**: Admin đăng nhập → redirect về `/dashboard` (không phải `/admin`).
+2. **Nút "Quản trị" hiển thị**: Header employee dashboard có nút "Quản trị" (màu tím) bên cạnh "Hướng dẫn".
+3. **Click "Quản trị"**: Click nút → redirect về `/admin` (admin dashboard).
+4. **Non-admin không thấy nút**: Manager/employee login → không có nút "Quản trị" trong header.
+5. **Admin có thể switch qua lại**: Admin ở employee view → click "Quản trị" → vào admin view → (optional) click "Công việc của tôi" → quay lại employee view.
+6. **Authentication vẫn hoạt động**: Admin access admin dashboard vẫn phải có role check trong backend (middleware không đổi).
+
+---

@@ -45,6 +45,14 @@ function logout() {
 // Bind logout button event
 document.getElementById('logoutBtn').addEventListener('click', logout);
 
+// Bind employee view button event (Phase P)
+const btnEmployeeView = document.getElementById('btnEmployeeView');
+if (btnEmployeeView) {
+  btnEmployeeView.addEventListener('click', () => {
+    window.location.href = '/employee/dashboard';
+  });
+}
+
 // Load dashboard data
 async function loadDashboard(refreshTaskList = true) {
   try {

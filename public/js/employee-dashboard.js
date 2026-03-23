@@ -8,13 +8,20 @@ if (!token) {
   window.location.href = '/login';
 }
 
-if (employee.role === 'admin' || employee.role === 'manager') {
-  window.location.href = `/${employee.role}/dashboard`;
-}
-
 // Display user name and position
 document.getElementById('userName').textContent = employee.fullName || 'Employee';
 document.getElementById('userPosition').textContent = employee.groupUser || 'Nhân viên';
+
+// Show "Quản trị" button for admin (Phase P)
+if (employee.role === 'admin') {
+  const btnAdminAccess = document.getElementById('btnAdminAccess');
+  if (btnAdminAccess) {
+    btnAdminAccess.classList.remove('hidden');
+    btnAdminAccess.addEventListener('click', () => {
+      window.location.href = '/admin/dashboard';
+    });
+  }
+}
 
 function logout() {
   localStorage.removeItem('token');
