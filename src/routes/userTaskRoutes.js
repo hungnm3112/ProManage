@@ -16,12 +16,12 @@ const { authenticate, authorize } = require('../middlewares/authMiddleware');
 /**
  * @route   GET /api/my-tasks
  * @desc    Get all tasks assigned to current employee
- * @access  Private (employee)
+ * @access  Private (employee, admin - Phase P)
  */
 router.get(
   '/',
   authenticate,
-  authorize('employee'),
+  authorize('employee', 'admin'),
   userTaskValidator.validateGetMyTasks,
   userTaskController.getMyTasks
 );
@@ -29,12 +29,12 @@ router.get(
 /**
  * @route   GET /api/my-tasks/:id
  * @desc    Get task details by ID
- * @access  Private (employee)
+ * @access  Private (employee, admin - Phase P)
  */
 router.get(
   '/:id',
   authenticate,
-  authorize('employee'),
+  authorize('employee', 'admin'),
   userTaskValidator.validateGetTaskById,
   userTaskController.getTaskById
 );
@@ -42,12 +42,12 @@ router.get(
 /**
  * @route   PUT /api/my-tasks/:id/checklist
  * @desc    Update checklist items
- * @access  Private (employee)
+ * @access  Private (employee, admin - Phase P)
  */
 router.put(
   '/:id/checklist',
   authenticate,
-  authorize('employee'),
+  authorize('employee', 'admin'),
   userTaskValidator.validateUpdateChecklist,
   userTaskController.updateChecklist
 );
@@ -55,12 +55,12 @@ router.put(
 /**
  * @route   POST /api/my-tasks/:id/evidence
  * @desc    Add evidence files to task
- * @access  Private (employee)
+ * @access  Private (employee, admin - Phase P)
  */
 router.post(
   '/:id/evidence',
   authenticate,
-  authorize('employee'),
+  authorize('employee', 'admin'),
   userTaskValidator.validateUploadEvidence,
   userTaskController.uploadEvidence
 );
@@ -68,12 +68,12 @@ router.post(
 /**
  * @route   POST /api/my-tasks/:id/submit
  * @desc    Submit task for review
- * @access  Private (employee)
+ * @access  Private (employee, admin - Phase P)
  */
 router.post(
   '/:id/submit',
   authenticate,
-  authorize('employee'),
+  authorize('employee', 'admin'),
   userTaskValidator.validateSubmitTask,
   userTaskController.submitTask
 );
@@ -81,52 +81,52 @@ router.post(
 /**
  * @route   POST /api/my-tasks/:id/confirm
  * @desc    Người phụ trách xác nhận nhận việc → status: assigned → in_progress
- * @access  Private (employee — chỉ người phụ trách)
+ * @access  Private (employee, admin - Phase P — chỉ người phụ trách)
  * @note    Không có route từ chối
  */
 router.post(
   '/:id/confirm',
   authenticate,
-  authorize('employee'),
+  authorize('employee', 'admin'),
   userTaskController.confirmTask
 );
 
 /**
  * @route   PUT /api/my-tasks/:id/assign-item
  * @desc    Người phụ trách tag checklist item cho đồng nghiệp trong cùng StoreTask
- * @access  Private (employee — chỉ người phụ trách)
+ * @access  Private (employee, admin - Phase P — chỉ người phụ trách)
  * @body    { itemId, assignedToEmployeeId }
  */
 router.put(
   '/:id/assign-item',
   authenticate,
-  authorize('employee'),
+  authorize('employee', 'admin'),
   userTaskController.assignChecklistItem
 );
 
 /**
  * @route   PUT /api/my-tasks/:id/review-item
  * @desc    Người phụ trách approve/reject checklist item của nhân viên được tag
- * @access  Private (employee — chỉ người phụ trách)
+ * @access  Private (employee, admin - Phase P — chỉ người phụ trách)
  * @body    { itemId, action: 'approve'|'reject', reviewNote }
  */
 router.put(
   '/:id/review-item',
   authenticate,
-  authorize('employee'),
+  authorize('employee', 'admin'),
   userTaskController.reviewChecklistItem
 );
 
 /**
  * @route   POST /api/my-tasks/:id/submit-item
  * @desc    Worker nộp 1 checklist item để responsible review (per-item submit)
- * @access  Private (employee — chỉ worker được giao item)
+ * @access  Private (employee, admin - Phase P — chỉ worker được giao item)
  * @body    { itemId: String }
  */
 router.post(
   '/:id/submit-item',
   authenticate,
-  authorize('employee'),
+  authorize('employee', 'admin'),
   userTaskController.submitChecklistItem
 );
 

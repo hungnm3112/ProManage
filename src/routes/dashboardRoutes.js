@@ -51,12 +51,12 @@ router.get(
 /**
  * @route   GET /api/dashboard/employee
  * @desc    Get employee dashboard data
- * @access  Private (employee only)
+ * @access  Private (employee, admin - Phase P: admin cần xem employee dashboard)
  */
 router.get(
   '/employee',
   authenticate,
-  authorize('employee'),
+  authorize('employee', 'admin'),
   dashboardController.getEmployeeDashboard
 );
 
