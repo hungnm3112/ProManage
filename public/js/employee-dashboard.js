@@ -433,6 +433,13 @@ function renderModalChecklist(items, isResponsible, userTaskId, myAssignedItems 
       const requiredBadge = item.required
         ? `<span class="text-xs px-1.5 py-0.5 bg-red-50 text-red-600 rounded font-medium border border-red-100">BẮT BUỘC</span>`
         : '';
+      // Evidences thumbnails cho item này (từ worker)
+      const itemEvidences = workerEvidences.filter(ev => ev.itemId && String(ev.itemId) === String(item._id));
+      const thumbsHtml = itemEvidences.length > 0
+        ? `<div class="ml-6 flex flex-wrap gap-2 mt-2">
+             ${itemEvidences.map(e => `<img src="${e.url}" alt="evidence" class="w-14 h-14 object-cover rounded border border-gray-200 cursor-pointer" onclick="window.open('${e.url}','_blank')">`).join('')}
+           </div>`
+        : '';
       // Build right-side buttons
       let rightBtns = '';
       let reviewNoteHtml = '';
