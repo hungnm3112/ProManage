@@ -384,14 +384,16 @@ function renderDetailContent(task, isResponsible, assignedItems) {
 
 function renderModalChecklist(items, isResponsible, userTaskId) {
   return items.map(item => {
-    const assignedName = item.assignedTo?.FullName || (item.assignedTo ? 'Đã giao' : null);
+    const assignedName = item.assignedTo?.FullName || item.assignedTo?.fullName || null;
     let assignHtml = '';
     if (isResponsible) {
       if (!item.assignedTo) {
         assignHtml = `<button onclick="openAssignItemModal('${userTaskId}','${item._id}')"
           class="text-xs px-2 py-1 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 border border-blue-200">👤 Giao</button>`;
       } else {
-        assignHtml = `<span class="text-xs text-gray-500">👤 ${escapeHtml(assignedName)}</span>`;
+        assignHtml = `<span class="text-xs text-gray-600">👤 <span class="font-medium">${escapeHtml(assignedName || '...')}</span></span>`
+          + (!item.isCompleted ? `<button onclick="openAssignItemModal('${userTaskId}','${item._id}')"
+          class="text-xs px-1.5 py-0.5 text-gray-400 hover:text-blue-600 rounded hover:bg-blue-50" title="Đổi người thực hiện">✏️</button>` : '');
       }
     }
     const reviewHtml = isResponsible ? renderReviewButtons(item, userTaskId) : '';

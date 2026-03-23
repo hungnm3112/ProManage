@@ -110,6 +110,10 @@ const getTaskById = async (req, res) => {
       .populate({
         path: 'employeeId',
         select: 'FullName Phone Email'
+      })
+      .populate({
+        path: 'checklist.assignedTo',
+        select: 'FullName Phone'
       });
 
     if (!userTask) {
@@ -434,7 +438,7 @@ const assignChecklistItem = async (req, res) => {
     if (!targetEmployee) {
       return sendError(res, 'Nhân viên không tồn tại', 404);
     }
-    if (targetEmployee.Status === 'Nghỉ việc') {
+    if (targetEmployee.Status === 'Đã nghỉ việc') {
       return sendError(res, 'Nhân viên này đã nghỉ việc', 400);
     }
     if (targetEmployee.ID_Branch.toString() !== storeTask.storeId.toString()) {

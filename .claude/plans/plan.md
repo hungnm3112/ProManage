@@ -787,3 +787,69 @@ router.post('/:id/messages', authenticate, authorize('employee', 'manager', 'adm
 11. Mở tab 💬 Tin nhắn → load được 50 tin gần nhất, hiện bubble UI
 12. Gửi tin → xuất hiện ngay bên phải; refresh sau 15s → cập nhật tin mới từ người khác
 13. `POST /api/employees` vẫn 404 (không thể tạo nhân viên)
+
+---
+
+## Phase L — Bugfix: Auto-heal UserTask cho nhân viên được giao item (data cũ)
+
+### Nguyên nhân lỗi
+
+Code ssignChecklistItem cũ (trước 21/3/2026) chỉ lưu checklist.assignedTo vào UserTask của người phụ trách, **không tạo UserTask** cho nhân viên được giao. Kết quả: nhân viên được giao (VD: Đoàn Thuỳ Dương) không có UserTask → dashboard hiển thị 0 task.
+
+Code mới (21/3) đã fix cho các assignment tương lai, nhưng data cũ vẫn bị thiếu UserTask.
+
+**Bugs cần fix:**
+
+| # | Lỗi | File | Dòng |
+|---|-----|------|------|
+| L-1 | Auto-heal: tạo UserTask thiếu khi load dashboard | dashboardController.js | Section 2 |
+| L-2 | Sai enum: 'Nghỉ việc' ≠ 'Đã nghỉ việc' trong Employee model | userTaskController.js | ssignChecklistItem |
+
+---
+
+### L-1. src/controllers/dashboardController.js — Auto-heal trong getEmployeeDashboard()
+
+Thêm block **sau** khi build esponsibleStoreTaskIds, **trước** khi query Section 2:
+
+**Logic:**
+1. Tìm tất cả UserTask có checklist.assignedTo === currentUser._id (dùng multikey index)
+2. Lấy danh sách storeTaskId từ kết quả
+3. Kiểm tra employee đã có UserTask cho các storeTask đó chưa
+4. Với những storeTask còn thiếu → tạo UserTask rỗng (checklist: [], status: 'assigned')
+5. Section 2 query chạy SAU auto-heal → bắt được UserTask mới tạo
+
+**Tại sao auto-heal ở đây (không phải endpoint riêng):**
+- Không cần migration script
+- Tự động sửa mọi data cũ khi nhân viên mở dashboard
+- Idempotent: chạy nhiều lần không tạo duplicate (do có existingTargetTask check)
+- Index { 'checklist.assignedTo': 1 } đã có → query nhanh
+
+---
+
+### L-2. src/controllers/userTaskController.js — Fix enum Status
+
+`js
+// SAI:
+if (targetEmployee.Status === 'Nghỉ việc')
+
+// ĐÚNG (theo Employee model enum):
+if (targetEmployee.Status === 'Đã nghỉ việc')
+`
+
+---
+
+### Files cần sửa (Phase L)
+
+| File | Thay đổi |
+|------|---------|
+| src/controllers/dashboardController.js | L-1: auto-heal block trước Section 2 |
+| src/controllers/userTaskController.js | L-2: fix enum 'Nghỉ việc' → 'Đã nghỉ việc' |
+
+---
+
+### Verification Phase L
+
+1. Nhân viên được giao item bởi người phụ trách (cũ hoặc mới) → mở dashboard → **tự động thấy task trong Section 2**
+2. Mở chi tiết task → thấy đúng item được giao cho mình (ssignedItems)
+3. Dashboard của người phụ trách không bị ảnh hưởng
+4. Giao item cho nhân viên đã nghỉ việc → hiện lỗi đúng

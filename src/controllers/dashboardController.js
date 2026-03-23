@@ -507,6 +507,30 @@ const getEmployeeDashboard = async (req, res) => {
       responsibleStoreTasks.map(st => st._id.toString())
     );
 
+    // ----------- Auto-heal (L-1): tạo UserTask thiếu cho NV được giao item bởi người phụ trách -----------
+    // Tìm tất cả UserTask có checklist.assignedTo === currentUser._id (multikey index)
+    const taggedSourceTasks = await UserTask.find({
+      'checklist.assignedTo': currentUser._id
+    }).select('storeTaskId broadcastId').lean();
+
+    if (taggedSourceTasks.length > 0) {
+      const taggedStoreTaskIds = [...new Set(taggedSourceTasks.map(ut => ut.storeTaskId.toString()))];
+      // Kiểm tra employee đã có UserTask cho các StoreTask đó chưa
+      const existingForTagged = await UserTask.find({
+        employeeId: currentUser._id,
+        storeTaskId: { $in: taggedStoreTaskIds }
+      }).select('storeTaskId').lean();
+      const existingSet = new Set(existingForTagged.map(ut => ut.storeTaskId.toString()));
+      const missingStoreTaskIds = taggedStoreTaskIds.filter(id => !existingSet.has(id));
+      if (missingStoreTaskIds.length > 0) {
+        const toCreate = missingStoreTaskIds.map(storeTaskId => {
+          const src = taggedSourceTasks.find(ut => ut.storeTaskId.toString() === storeTaskId);
+          return { storeTaskId, broadcastId: src.broadcastId, employeeId: currentUser._id, checklist: [], evidences: [], status: 'assigned' };
+        });
+        await UserTask.insertMany(toCreate);
+      }
+    }
+
     // ----------- Section 2: Việc của tôi (worker, không phải phụ trách) -----------
     const allUserTasks = await UserTask.find({ employeeId: currentUser._id });
 
