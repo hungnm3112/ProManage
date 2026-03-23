@@ -283,6 +283,7 @@ async function openTaskDetail(userTaskId, role) {
     if (!resp.ok) throw new Error('Không tải được chi tiết task');
     const result = await resp.json();
     const { task, isResponsible, assignedItems, stats } = result.data;
+    const fullChecklist = result.data.fullChecklist || [];
 
     currentStoreTaskId = task.storeTaskId?._id || task.storeTaskId;
 
@@ -295,7 +296,7 @@ async function openTaskDetail(userTaskId, role) {
       badge.textContent = isResponsible ? '👑 Phụ trách' : '🔧 Thực hiện';
       badge.classList.remove('hidden');
     }
-    renderDetailContent(task, isResponsible, assignedItems || []);
+    renderDetailContent(task, isResponsible, assignedItems || [], fullChecklist);
     renderDetailFooter(task, isResponsible, userTaskId);
     switchModalTab('detail');
 
@@ -352,13 +353,13 @@ function switchModalTab(tab) {
   }
 }
 
-function renderDetailContent(task, isResponsible, assignedItems) {
+function renderDetailContent(task, isResponsible, assignedItems, fullChecklist = []) {
   const broadcast = task.broadcastId || {};
   const storeTask = task.storeTaskId || {};
   const storeInfo = storeTask.storeId || {};
   const checklist = task.checklist || [];
   const evidences = task.evidences || [];
-  const itemsToRender = isResponsible ? checklist : assignedItems;
+  const itemsToRender = isResponsible ? checklist : (fullChecklist.length > 0 ? fullChecklist : assignedItems);
 
   const creatorName        = broadcast.createdBy?.FullName || broadcast.createdBy?.fullName || 'Admin';
   const storeName          = storeInfo.Name || '';
@@ -408,12 +409,12 @@ function renderDetailContent(task, isResponsible, assignedItems) {
   if (itemsToRender.length > 0) {
     const sectionLabel = isResponsible
       ? `📋 Checklist <span class="text-gray-400 font-normal text-xs">(${checklist.length} mục)</span>`
-      : `📌 Việc được giao <span class="text-gray-400 font-normal text-xs">(${assignedItems.length}/${checklist.length || '?'} mục)</span>`;
+      : `� Checklist <span class="text-gray-400 font-normal text-xs">(${fullChecklist.length} mục — bạn thực hiện ${assignedItems.length})</span>`;
     checklistHtml = `
       <div class="mb-4">
         <h4 class="font-semibold text-gray-800 mb-3 text-sm">${sectionLabel}</h4>
         <div id="modalChecklistItems" class="space-y-2">
-          ${renderModalChecklist(itemsToRender, isResponsible, task._id)}
+          ${renderModalChecklist(itemsToRender, isResponsible, task._id, assignedItems)}
         </div>
       </div>`;
   }
@@ -459,9 +460,46 @@ function renderDetailContent(task, isResponsible, assignedItems) {
   }
 }
 
-function renderModalChecklist(items, isResponsible, userTaskId) {
+function renderModalChecklist(items, isResponsible, userTaskId, myAssignedItems = []) {
+  const myItemIds = myAssignedItems.map(i => String(i._id));
   return items.map(item => {
     const assignedName = item.assignedTo?.FullName || item.assignedTo?.fullName || null;
+
+    // ── Worker read-only view for items not assigned to them ──
+    if (!isResponsible) {
+      const isMyItem = myItemIds.includes(String(item._id));
+      if (!isMyItem) {
+        const requiredBadge = item.required
+          ? `<span class="text-xs px-1.5 py-0.5 bg-red-50 text-red-600 rounded font-medium border border-red-100">BẮT BUỘC</span>`
+          : '';
+        const itemBg = 'bg-gray-50 opacity-75';
+        let statusInfo;
+        if (assignedName) {
+          statusInfo = `<span class="text-xs text-gray-500">👤 ${escapeHtml(assignedName)}</span>
+            <span class="text-xs ${item.isCompleted ? 'text-green-600' : 'text-gray-400'}">
+              ${item.isCompleted ? '✅ Hoàn thành' : '⏳ Chưa xong'}
+            </span>`;
+        } else {
+          statusInfo = `<span class="text-xs text-gray-400 italic">Chưa giao</span>`;
+        }
+        return `
+          <div class="flex items-start gap-3 p-3 ${itemBg} rounded-lg">
+            <span class="${item.isCompleted ? 'text-green-400' : 'text-gray-300'} text-base mt-0.5 flex-shrink-0">
+              ${item.isCompleted ? '✅' : '⬜'}
+            </span>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <span class="${item.isCompleted ? 'line-through text-gray-400' : 'text-gray-600'} text-sm">${escapeHtml(item.task)}</span>
+                ${requiredBadge}
+              </div>
+              ${item.note ? `<p class="text-xs text-gray-400 mt-0.5">${escapeHtml(item.note)}</p>` : ''}
+              <div class="flex items-center gap-2 mt-1 flex-wrap">${statusInfo}</div>
+            </div>
+          </div>`;
+      }
+    }
+
+    // ── Responsible view OR worker's own item ──
     let assignHtml = '';
     if (isResponsible) {
       if (!item.assignedTo) {

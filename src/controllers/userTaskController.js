@@ -137,18 +137,27 @@ const getTaskById = async (req, res) => {
     const assignedPersonId = storeTask?.assignedPersonId;
 
     let assignedItems = [];
+    let fullChecklist = [];
     if (!isResponsible && storeTask?._id) {
       // External employee: look up items assigned to them across all responsible persons' UserTasks
       const responsibleIds = assignedEmployees.map(e => e._id || e);
       const responsibleUserTasks = await UserTask.find({
         storeTaskId: storeTask._id,
         employeeId: { $in: responsibleIds }
-      }).select('checklist');
+      })
+        .select('checklist')
+        .populate({ path: 'checklist.assignedTo', select: 'FullName' });
       for (const rt of responsibleUserTasks) {
         const items = rt.checklist
           .filter(item => item.assignedTo?.toString() === currentUser._id.toString())
           .map(item => (item.toObject ? item.toObject() : JSON.parse(JSON.stringify(item))));
         assignedItems.push(...items);
+      }
+      // Build full checklist for worker read-only view
+      for (const rt of responsibleUserTasks) {
+        fullChecklist.push(
+          ...rt.checklist.map(item => (item.toObject ? item.toObject() : JSON.parse(JSON.stringify(item))))
+        );
       }
     }
 
@@ -158,7 +167,8 @@ const getTaskById = async (req, res) => {
       task: userTask,
       stats,
       isResponsible,
-      assignedItems
+      assignedItems,
+      fullChecklist
     });
   } catch (error) {
     console.error('getTaskById error:', error);
