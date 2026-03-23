@@ -149,7 +149,10 @@ const getTaskById = async (req, res) => {
         .populate({ path: 'checklist.assignedTo', select: 'FullName' });
       for (const rt of responsibleUserTasks) {
         const items = rt.checklist
-          .filter(item => item.assignedTo?.toString() === currentUser._id.toString())
+          .filter(item => {
+            const id = item.assignedTo?._id ?? item.assignedTo;
+            return id?.toString() === currentUser._id.toString();
+          })
           .map(item => (item.toObject ? item.toObject() : JSON.parse(JSON.stringify(item))));
         assignedItems.push(...items);
       }
@@ -163,12 +166,25 @@ const getTaskById = async (req, res) => {
 
     const stats = userTask.getStats();
 
+    // Nếu là responsible, lấy evidences của tất cả workers để hiển thị trong checklist
+    let workerEvidences = [];
+    if (isResponsible && storeTask?._id) {
+      const workerUserTasks = await UserTask.find({
+        storeTaskId: storeTask._id,
+        employeeId: { $ne: currentUser._id }
+      }).select('evidences');
+      for (const wt of workerUserTasks) {
+        workerEvidences.push(...wt.evidences);
+      }
+    }
+
     return sendSuccess(res, 'Task fetched successfully', {
       task: userTask,
       stats,
       isResponsible,
       assignedItems,
-      fullChecklist
+      fullChecklist,
+      workerEvidences
     });
   } catch (error) {
     console.error('getTaskById error:', error);
@@ -666,7 +682,7 @@ const confirmTask = async (req, res) => {
 const submitChecklistItem = async (req, res) => {
   try {
     const { id } = req.params;
-    const { itemId } = req.body;
+    const { itemId, evidences } = req.body;
     const currentUser = req.user;
 
     if (!itemId) return sendError(res, 'itemId là bắt buộc', 400);
@@ -713,6 +729,19 @@ const submitChecklistItem = async (req, res) => {
     await responsibleTask.save();
 
     await storeTask.updateCompletionRate();
+
+    // Lưu evidences vào workerTask với itemId
+    if (evidences && Array.isArray(evidences) && evidences.length > 0) {
+      evidences.forEach(ev => {
+        workerTask.evidences.push({
+          type: ev.type || 'photo',
+          url: ev.url,
+          filename: ev.filename,
+          itemId: itemId
+        });
+      });
+      await workerTask.save();
+    }
 
     // Kiểm tra TẤT CẢ item của worker đã submitted chưa
     let allSubmitted = true;

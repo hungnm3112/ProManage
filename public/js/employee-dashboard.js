@@ -284,6 +284,7 @@ async function openTaskDetail(userTaskId, role) {
     const result = await resp.json();
     const { task, isResponsible, assignedItems, stats } = result.data;
     const fullChecklist = result.data.fullChecklist || [];
+    const workerEvidences = result.data.workerEvidences || [];
 
     currentStoreTaskId = task.storeTaskId?._id || task.storeTaskId;
 
@@ -296,7 +297,7 @@ async function openTaskDetail(userTaskId, role) {
       badge.textContent = isResponsible ? '👑 Phụ trách' : '🔧 Thực hiện';
       badge.classList.remove('hidden');
     }
-    renderDetailContent(task, isResponsible, assignedItems || [], fullChecklist);
+    renderDetailContent(task, isResponsible, assignedItems || [], fullChecklist, workerEvidences);
     renderDetailFooter(task, isResponsible, userTaskId);
     switchModalTab('detail');
 
@@ -353,7 +354,7 @@ function switchModalTab(tab) {
   }
 }
 
-function renderDetailContent(task, isResponsible, assignedItems, fullChecklist = []) {
+function renderDetailContent(task, isResponsible, assignedItems, fullChecklist = [], workerEvidences = []) {
   const broadcast = task.broadcastId || {};
   const storeTask = task.storeTaskId || {};
   const storeInfo = storeTask.storeId || {};
@@ -414,84 +415,63 @@ function renderDetailContent(task, isResponsible, assignedItems, fullChecklist =
       <div class="mb-4">
         <h4 class="font-semibold text-gray-800 mb-3 text-sm">${sectionLabel}</h4>
         <div id="modalChecklistItems" class="space-y-2">
-          ${renderModalChecklist(itemsToRender, isResponsible, task._id, assignedItems)}
+          ${renderModalChecklist(itemsToRender, isResponsible, task._id, assignedItems, task, workerEvidences)}
         </div>
       </div>`;
   }
 
-  // ── Upload / Evidence ────────────────────────────────────────────
-  const canUpload        = ['in_progress', 'rejected'].includes(task.status);
-  const showReadOnlyEvid = ['submitted', 'approved'].includes(task.status) && evidences.length > 0;
-
-  let uploadHtml = '';
-  if (canUpload) {
-    const thumbs = evidences.length > 0
-      ? `<div class="flex flex-wrap gap-2 mt-2">
-           ${evidences.map(e => `<img src="${e.url}" alt="evidence"
-             class="w-16 h-16 object-cover rounded-lg border border-gray-200 cursor-pointer"
-             onclick="window.open('${e.url}','_blank')">`).join('')}
-         </div>
-         <p class="text-xs text-gray-400 mt-1">${evidences.length} ảnh đã tải — thêm ảnh mới bên dưới</p>`
-      : '';
-    uploadHtml = `
-      <div class="mb-2">
-        <h4 class="font-semibold text-gray-800 mb-2 text-sm">📷 Ảnh báo cáo</h4>
-        ${thumbs}
-        <input type="file" id="evidenceInput" accept="image/*" multiple
-          class="block mt-2 text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded
-                 file:border-0 file:text-sm file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100">
-        <div id="evidencePreviews" class="flex flex-wrap gap-2 mt-2"></div>
-      </div>`;
-  } else if (showReadOnlyEvid) {
-    uploadHtml = `
-      <div class="mb-2">
-        <h4 class="font-semibold text-gray-800 mb-2 text-sm">📷 Ảnh báo cáo đã nộp</h4>
-        <div class="flex flex-wrap gap-2">
-          ${evidences.map(e => `<img src="${e.url}" alt="evidence"
-            class="w-16 h-16 object-cover rounded-lg border border-gray-200 cursor-pointer"
-            onclick="window.open('${e.url}','_blank')">`).join('')}
-        </div>
-      </div>`;
-  }
-
-  document.getElementById('taskDetailContent').innerHTML = infoHtml + checklistHtml + uploadHtml;
-  if (canUpload) {
-    document.getElementById('evidenceInput')?.addEventListener('change', handleEvidencePreview);
-  }
+  document.getElementById('taskDetailContent').innerHTML = infoHtml + checklistHtml;
 }
 
-function renderModalChecklist(items, isResponsible, userTaskId, myAssignedItems = []) {
+function renderModalChecklist(items, isResponsible, userTaskId, myAssignedItems = [], task = null, workerEvidences = []) {
   const myItemIds = myAssignedItems.map(i => String(i._id));
 
   // ── Responsible view ──────────────────────────────────────────
   if (isResponsible) {
     return items.map(item => {
-      const assignedName = item.assignedTo?.FullName || item.assignedTo?.fullName || null;
-      let assignHtml = '';
+      const assignedName = item.assignedTo?.FullName || item.assignedTo?.fullName || '';
+      const requiredBadge = item.required
+        ? `<span class="text-xs px-1.5 py-0.5 bg-red-50 text-red-600 rounded font-medium border border-red-100">BẮT BUỘC</span>`
+        : '';
+      // Build right-side buttons
+      let rightBtns = '';
+      let reviewNoteHtml = '';
       if (!item.assignedTo) {
-        assignHtml = `<button onclick="openAssignItemModal('${userTaskId}','${item._id}')"
-          class="text-xs px-2 py-1 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 border border-blue-200">👤 Giao</button>`;
+        rightBtns = `<button onclick="openAssignItemModal('${userTaskId}','${item._id}')"
+          class="text-xs px-2 py-1 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 border border-blue-200 flex-shrink-0">👤 Giao</button>`;
       } else {
-        assignHtml = `<span class="text-xs text-gray-600">👤 <span class="font-medium">${escapeHtml(assignedName || '...')}</span></span>`
-          + (!item.isCompleted ? `<button onclick="openAssignItemModal('${userTaskId}','${item._id}')"
-          class="text-xs px-1.5 py-0.5 text-gray-400 hover:text-blue-600 rounded hover:bg-blue-50" title="Đổi người thực hiện">✏️</button>` : '');
+        const editBtn = !item.isCompleted
+          ? `<button onclick="openAssignItemModal('${userTaskId}','${item._id}')"
+              class="text-xs text-gray-400 hover:text-blue-600 rounded hover:bg-blue-50 px-0.5" title="Đổi người">✏️</button>` : '';
+        const nameHtml = `<span class="text-xs text-gray-500 flex-shrink-0">👤 <span class="font-medium text-gray-700">${escapeHtml(assignedName || '...')}</span></span>${editBtn}`;
+        if (item.reviewStatus === 'approved') {
+          rightBtns = nameHtml + `<span class="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium flex-shrink-0">✅ Đã duyệt</span>`;
+        } else if (item.reviewStatus === 'rejected') {
+          rightBtns = nameHtml + `<span class="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-medium flex-shrink-0">❌ Từ chối</span>`;
+          if (item.reviewNote) reviewNoteHtml = `<p class="ml-6 text-xs text-red-500 italic mt-0.5">"${escapeHtml(item.reviewNote)}"</p>`;
+        } else if (!item.isCompleted) {
+          rightBtns = nameHtml + `<span class="text-xs text-gray-400 italic flex-shrink-0">⏳ Chờ</span>`;
+        } else {
+          rightBtns = nameHtml
+            + `<button onclick="handleReviewItem('${userTaskId}','${item._id}','approve')"
+                class="text-xs px-2 py-1 bg-green-50 text-green-700 rounded hover:bg-green-100 border border-green-200 flex-shrink-0">✅ OK</button>`
+            + `<button onclick="showRejectNoteInput(document.getElementById('checklistItem-${item._id}'),'${userTaskId}','${item._id}')"
+                class="text-xs px-2 py-1 bg-red-50 text-red-700 rounded hover:bg-red-100 border border-red-200 flex-shrink-0">❌ Không OK</button>`;
+        }
       }
       return `
-        <div class="flex items-start gap-3 p-3 bg-gray-50 rounded-lg" id="checklistItem-${item._id}">
-          <span class="${item.isCompleted ? 'text-green-500' : 'text-gray-400'} text-base mt-0.5 flex-shrink-0">
-            ${item.isCompleted ? '✅' : '⬜'}
-          </span>
-          <div class="flex-1 min-w-0">
-            <div class="flex items-center gap-1.5 flex-wrap">
+        <div class="p-3 bg-gray-50 rounded-lg" id="checklistItem-${item._id}">
+          <div class="flex items-center gap-2">
+            <span class="${item.isCompleted ? 'text-green-500' : 'text-gray-400'} text-base flex-shrink-0">${item.isCompleted ? '✅' : '⬜'}</span>
+            <div class="flex-1 flex items-center gap-1.5 flex-wrap min-w-0">
               <span class="${item.isCompleted ? 'line-through text-gray-400' : 'text-gray-800'} text-sm">${escapeHtml(item.task)}</span>
-              ${item.required ? `<span class="text-xs px-1.5 py-0.5 bg-red-50 text-red-600 rounded font-medium border border-red-100">BẮT BUỘC</span>` : ''}
+              ${requiredBadge}
             </div>
-            ${item.note ? `<p class="text-xs text-gray-400 mt-0.5">${escapeHtml(item.note)}</p>` : ''}
-            <div class="flex items-center gap-2 mt-1.5 flex-wrap review-btn-area">
-              ${assignHtml}
-              ${renderReviewButtons(item, userTaskId)}
-            </div>
+            <div class="flex items-center gap-1.5 flex-shrink-0 review-btn-area">${rightBtns}</div>
           </div>
+          ${item.note ? `<p class="ml-6 text-xs text-gray-400 mt-1">${escapeHtml(item.note)}</p>` : ''}
+          ${reviewNoteHtml}
+          ${thumbsHtml}
         </div>`;
     }).join('');
   }
@@ -509,23 +489,48 @@ function renderModalChecklist(items, isResponsible, userTaskId, myAssignedItems 
     if (isRejected) itemBg = 'bg-red-50 border border-red-200';
     else if (isApproved) itemBg = 'bg-green-50 border border-green-100';
     const canAct = !item.isCompleted || isRejected;
-    const btnLabel = isRejected ? '📤 Nộp lại' : '📤 Nộp item này';
-    const actionHtml = canAct
-      ? `<button onclick="handleSubmitItem('${userTaskId}','${item._id}')" class="text-xs px-2 py-1 bg-purple-50 text-purple-700 rounded hover:bg-purple-100 border border-purple-200 font-medium">${btnLabel}</button>`
-      : renderWorkerItemStatus(item);
+    const requiredBadge = item.required
+      ? `<span class="text-xs px-1.5 py-0.5 bg-red-50 text-red-600 rounded font-medium border border-red-100">BẮT BUỘC</span>`
+      : '';
+    // Evidences thumbnails cho item này
+    const itemEvidences = (task.evidences || []).filter(ev => ev.itemId && String(ev.itemId) === String(item._id));
+    const thumbsHtml = itemEvidences.length > 0
+      ? `<div class="ml-6 flex flex-wrap gap-2 mt-2">
+           ${itemEvidences.map(e => `<img src="${e.url}" alt="evidence" class="w-14 h-14 object-cover rounded border border-gray-200 cursor-pointer" onclick="window.open('${e.url}','_blank')">`).join('')}
+         </div>`
+      : '';
+    // Right-side buttons
+    let rightBtns = '';
+    let statusNoteHtml = '';
+    if (canAct) {
+      rightBtns = `
+        <label for="photoInput-${item._id}" id="photoLabel-${item._id}" class="cursor-pointer inline-block text-xs px-2.5 bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 rounded font-medium flex-shrink-0" style="padding-top: 0.85rem; padding-bottom: 0.85rem;" title="Thêm ảnh">Tải lên</label>
+        <input type="file" id="photoInput-${item._id}" accept="image/*" multiple class="hidden" onchange="updateItemPhotoCount('${item._id}',this)">
+        <button onclick="handleSubmitItem('${userTaskId}','${item._id}')"
+          class="text-xs px-2.5 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded font-medium flex-shrink-0">Đã xong</button>`;
+      if (isRejected && item.reviewNote) {
+        statusNoteHtml = `<p class="ml-6 text-xs text-red-500 italic mt-0.5">"${escapeHtml(item.reviewNote)}"</p>`;
+      }
+    } else if (isApproved) {
+      rightBtns = `<span class="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium flex-shrink-0">✅ Đã duyệt</span>`;
+    } else if (item.isCompleted) {
+      rightBtns = `<span class="text-xs text-gray-400 italic flex-shrink-0">⏳ Chờ duyệt</span>`;
+    }
     return `
-      <div class="flex items-start gap-3 p-3 ${itemBg} rounded-lg" id="checklistItem-${item._id}">
-        <span class="${iconClass} text-base mt-0.5 flex-shrink-0">${itemIcon}</span>
-        <div class="flex-1 min-w-0">
-          <div class="flex items-center gap-1.5 flex-wrap">
+      <div class="p-3 ${itemBg} rounded-lg" id="checklistItem-${item._id}">
+        <div class="flex items-center gap-2">
+          <span class="${iconClass} text-base flex-shrink-0">${itemIcon}</span>
+          <div class="flex-1 flex items-center gap-1.5 flex-wrap min-w-0">
             <span class="${isApproved ? 'line-through text-gray-400' : 'text-gray-800'} text-sm">${escapeHtml(item.task)}</span>
-            ${item.required ? `<span class="text-xs px-1.5 py-0.5 bg-red-50 text-red-600 rounded font-medium border border-red-100">BẮT BUỘC</span>` : ''}
+            ${requiredBadge}
           </div>
-          ${item.note ? `<p class="text-xs text-gray-400 mt-0.5">${escapeHtml(item.note)}</p>` : ''}
-          <div class="flex items-center gap-2 mt-1.5 flex-wrap review-btn-area">
-            ${actionHtml}
-          </div>
+          <div class="flex items-center gap-1.5 flex-shrink-0 review-btn-area">${rightBtns}</div>
         </div>
+        ${item.note ? `<p class="ml-6 text-xs text-gray-400 mt-1">${escapeHtml(item.note)}</p>` : ''}
+        ${statusNoteHtml}
+        ${thumbsHtml}
+        <div id="photoInfo-${item._id}" class="ml-6 hidden mt-1"><span id="photoCount-${item._id}" class="text-xs text-purple-500"></span></div>
+        <div id="photoPreviews-${item._id}" class="ml-6 flex flex-wrap gap-1 mt-1"></div>
       </div>`;
   }).join('');
 
@@ -534,23 +539,21 @@ function renderModalChecklist(items, isResponsible, userTaskId, myAssignedItems 
     const requiredBadge = item.required
       ? `<span class="text-xs px-1.5 py-0.5 bg-red-50 text-red-600 rounded font-medium border border-red-100">BẮT BUỘC</span>`
       : '';
-    const statusInfo = assignedName
-      ? `<span class="text-xs text-gray-500">👤 ${escapeHtml(assignedName)}</span>
-         <span class="text-xs ${item.isCompleted ? 'text-green-600' : 'text-gray-400'}">${item.isCompleted ? '✅ Hoàn thành' : '⏳ Chưa xong'}</span>`
-      : `<span class="text-xs text-gray-400 italic">Chưa giao</span>`;
+    const statusBadge = assignedName
+      ? `<span class="text-xs text-gray-500 flex-shrink-0">👤 ${escapeHtml(assignedName)}</span>
+         <span class="text-xs flex-shrink-0 ${item.isCompleted ? 'text-green-600' : 'text-gray-400'}">${item.isCompleted ? '✅' : '⏳ Chưa xong'}</span>`
+      : `<span class="text-xs text-gray-400 italic flex-shrink-0">Chưa giao</span>`;
     return `
-      <div class="flex items-start gap-3 p-3 bg-gray-50 opacity-75 rounded-lg">
-        <span class="${item.isCompleted ? 'text-green-400' : 'text-gray-300'} text-base mt-0.5 flex-shrink-0">
-          ${item.isCompleted ? '✅' : '⬜'}
-        </span>
-        <div class="flex-1 min-w-0">
-          <div class="flex items-center gap-1.5 flex-wrap">
+      <div class="p-3 bg-gray-50 opacity-75 rounded-lg">
+        <div class="flex items-center gap-2">
+          <span class="${item.isCompleted ? 'text-green-400' : 'text-gray-300'} text-base flex-shrink-0">${item.isCompleted ? '✅' : '⬜'}</span>
+          <div class="flex-1 flex items-center gap-1.5 flex-wrap min-w-0">
             <span class="${item.isCompleted ? 'line-through text-gray-400' : 'text-gray-600'} text-sm">${escapeHtml(item.task)}</span>
             ${requiredBadge}
           </div>
-          ${item.note ? `<p class="text-xs text-gray-400 mt-0.5">${escapeHtml(item.note)}</p>` : ''}
-          <div class="flex items-center gap-2 mt-1 flex-wrap">${statusInfo}</div>
+          <div class="flex items-center gap-1.5 flex-shrink-0">${statusBadge}</div>
         </div>
+        ${item.note ? `<p class="ml-6 text-xs text-gray-400 mt-1">${escapeHtml(item.note)}</p>` : ''}
       </div>`;
   }).join('');
 
@@ -564,26 +567,67 @@ function renderModalChecklist(items, isResponsible, userTaskId, myAssignedItems 
   return myItemsHtml + separator + otherItemsHtml;
 }
 
+function updateItemPhotoCount(itemId, input) {
+  const count = input.files?.length || 0;
+  const infoEl = document.getElementById(`photoInfo-${itemId}`);
+  if (infoEl) infoEl.classList.toggle('hidden', count === 0);
+  const countEl = document.getElementById(`photoCount-${itemId}`);
+  if (countEl) countEl.textContent = count > 0 ? `${count} ảnh đã chọn` : '';
+  const previews = document.getElementById(`photoPreviews-${itemId}`);
+  if (!previews) return;
+  previews.innerHTML = '';
+  Array.from(input.files).slice(0, 5).forEach(f => {
+    const img = document.createElement('img');
+    img.src = URL.createObjectURL(f);
+    img.className = 'w-14 h-14 object-cover rounded border border-gray-200';
+    previews.appendChild(img);
+  });
+}
+
 async function handleSubmitItem(workerUserTaskId, itemId) {
   const itemEl = document.getElementById(`checklistItem-${itemId}`);
   const btn = itemEl?.querySelector('.review-btn-area button');
+  const originalLabel = btn?.textContent || '📤 Nộp item này';
   if (btn) { btn.disabled = true; btn.textContent = 'Đang nộp...'; }
   try {
+    // Upload ảnh per-item nếu có
+    let evidences = [];
+    const photoInput = document.getElementById(`photoInput-${itemId}`);
+    if (photoInput?.files?.length > 0) {
+      if (photoInput.files.length > 5) { showToast('Tối đa 5 ảnh mỗi item', 'error'); if (btn) { btn.disabled = false; btn.textContent = originalLabel; } return; }
+      const formData = new FormData();
+      Array.from(photoInput.files).forEach(f => formData.append('photos', f));
+      const uploadResp = await fetch('/api/upload/photos', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData
+      });
+      const uploadResult = await uploadResp.json();
+      if (!uploadResult.success) throw new Error(uploadResult.message || 'Lỗi upload ảnh');
+      evidences = (uploadResult.data?.photos || []).map(p => ({ type: 'photo', url: p.url, filename: p.filename }));
+    }
+
     const resp = await fetch(`/api/my-tasks/${workerUserTaskId}/submit-item`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ itemId })
+      body: JSON.stringify({ itemId, evidences })
     });
     const result = await resp.json();
     if (!result.success) throw new Error(result.message || 'Lỗi nộp item');
 
     // Cập nhật UI item in-place
     if (itemEl) {
+      // Icon → ⏳
       const icon = itemEl.querySelector('span.text-base');
-      if (icon) { icon.textContent = '⏳'; icon.className = 'text-gray-400 text-base mt-0.5 flex-shrink-0'; }
+      if (icon) { icon.textContent = '⏳'; icon.className = 'text-gray-400 text-base flex-shrink-0'; }
+      // Thay buttons phải bằng badge chờ duyệt
       const btnArea = itemEl.querySelector('.review-btn-area');
-      if (btnArea) btnArea.innerHTML = `<span class="text-xs text-gray-400 italic">⏳ Chờ duyệt</span>`;
-      itemEl.className = 'flex items-start gap-3 p-3 bg-blue-50 border border-blue-100 rounded-lg';
+      if (btnArea) btnArea.innerHTML = `<span class="text-xs text-gray-400 italic flex-shrink-0">⏳ Chờ duyệt</span>`;
+      // Xóa photo info + previews bên dưới
+      document.getElementById(`photoInfo-${itemId}`)?.remove();
+      document.getElementById(`photoPreviews-${itemId}`)?.remove();
+      // Reset background về màu xanh nhạt (submitted)
+      itemEl.className = 'p-3 bg-blue-50 border border-blue-100 rounded-lg';
     }
 
     if (result.data?.workerTaskStatus === 'submitted') {
@@ -595,7 +639,7 @@ async function handleSubmitItem(workerUserTaskId, itemId) {
     }
   } catch (err) {
     showToast(err.message, 'error');
-    if (btn) { btn.disabled = false; btn.textContent = btn.textContent.includes('lại') ? '📤 Nộp lại' : '📤 Nộp item này'; }
+    if (btn) { btn.disabled = false; btn.textContent = originalLabel; }
   }
 }
 
