@@ -396,10 +396,11 @@ function renderModalChecklist(items, isResponsible, userTaskId) {
           class="text-xs px-1.5 py-0.5 text-gray-400 hover:text-blue-600 rounded hover:bg-blue-50" title="Đổi người thực hiện">✏️</button>` : '');
       }
     }
-    const reviewHtml = isResponsible ? renderReviewButtons(item, userTaskId) : '';
+    const reviewHtml = isResponsible ? renderReviewButtons(item, userTaskId) : renderWorkerItemStatus(item);
+    const itemBg = (!isResponsible && item.reviewStatus === 'rejected') ? 'bg-red-50 border border-red-200' : 'bg-gray-50';
 
     return `
-      <div class="flex items-start gap-3 p-3 bg-gray-50 rounded-lg" id="checklistItem-${item._id}">
+      <div class="flex items-start gap-3 p-3 ${itemBg} rounded-lg" id="checklistItem-${item._id}">
         <span class="${item.isCompleted ? 'text-green-500' : 'text-gray-400'} text-base mt-0.5 flex-shrink-0">
           ${item.isCompleted ? '✅' : '⬜'}
         </span>
@@ -413,6 +414,20 @@ function renderModalChecklist(items, isResponsible, userTaskId) {
         </div>
       </div>`;
   }).join('');
+}
+
+function renderWorkerItemStatus(item) {
+  if (item.reviewStatus === 'approved') {
+    return `<span class="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">✅ Đã duyệt</span>`;
+  }
+  if (item.reviewStatus === 'rejected') {
+    return `<span class="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-medium">❌ Bị từ chối</span>`
+      + (item.reviewNote ? `<span class="text-xs text-red-500 italic">"${escapeHtml(item.reviewNote)}"</span>` : '');
+  }
+  if (item.isCompleted) {
+    return `<span class="text-xs text-gray-400 italic">⏳ Chờ duyệt</span>`;
+  }
+  return '';
 }
 
 function renderReviewButtons(item, userTaskId) {
