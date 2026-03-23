@@ -46,33 +46,52 @@ const deleteUserTask = async (req, res) => {
     const storeTaskId = userTask.storeTaskId;
     const broadcastTitle = userTask.broadcastId?.title || 'Task';
     
-    // Remove from StoreTask.assignedEmployees
+    // Cascade delete: find ALL UserTasks under the same StoreTask (including workers)
     if (storeTaskId) {
       const storeTask = await StoreTask.findById(storeTaskId);
-      
+
       if (storeTask) {
-        storeTask.assignedEmployees = storeTask.assignedEmployees.filter(
-          empId => empId.toString() !== employeeId.toString()
-        );
-        
-        // Since there is now only 1 UserTask per StoreTask, delete the StoreTask too
+        // Notify ALL employees whose UserTasks share this StoreTask
+        const allUserTasks = await UserTask.find({ storeTaskId: storeTask._id });
+        for (const ut of allUserTasks) {
+          await notificationService.createNotification(
+            ut.employeeId,
+            'task_cancelled',
+            'Task đã bị hủy',
+            `Task "${broadcastTitle}" đã bị admin hủy`,
+            { userTaskId: ut._id }
+          );
+        }
+
+        // Delete ALL related UserTasks + the StoreTask
+        await UserTask.deleteMany({ storeTaskId: storeTask._id });
+        console.log(`[Admin/deleteUserTask] Deleted ${allUserTasks.length} UserTask(s) for StoreTask`);
         await StoreTask.findByIdAndDelete(storeTask._id);
         console.log('[Admin/deleteUserTask] Deleted associated StoreTask');
+      } else {
+        // StoreTask not found — delete just the single UserTask
+        await UserTask.findByIdAndDelete(id);
+        console.log('[Admin/deleteUserTask] Deleted UserTask (no StoreTask found)');
+        await notificationService.createNotification(
+          employeeId,
+          'task_cancelled',
+          'Task đã bị hủy',
+          `Task "${broadcastTitle}" đã bị admin hủy`,
+          { userTaskId: id }
+        );
       }
+    } else {
+      // No storeTaskId — delete just this UserTask
+      await UserTask.findByIdAndDelete(id);
+      console.log('[Admin/deleteUserTask] Deleted UserTask (no storeTaskId)');
+      await notificationService.createNotification(
+        employeeId,
+        'task_cancelled',
+        'Task đã bị hủy',
+        `Task "${broadcastTitle}" đã bị admin hủy`,
+        { userTaskId: id }
+      );
     }
-    
-    // Delete the UserTask
-    await UserTask.findByIdAndDelete(id);
-    console.log('[Admin/deleteUserTask] Deleted UserTask');
-    
-    // Create notification for employee (task cancelled)
-    await notificationService.createNotification(
-      employeeId,
-      'task_cancelled',
-      'Task đã bị hủy',
-      `Task "${broadcastTitle}" đã bị admin hủy`,
-      { userTaskId: id }
-    );
     
     console.log('[Admin/deleteUserTask] Delete successful');
     
