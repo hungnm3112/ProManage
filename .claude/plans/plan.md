@@ -1716,3 +1716,27 @@ if (btnEmployeeView) {
 6. **Authentication vẫn hoạt động**: Admin access admin dashboard vẫn phải có role check trong backend (middleware không đổi).
 
 ---
+
+### Bug Fix: Authorization Issue (March 23, 2026)
+
+**Bug**: Admin login vào employee dashboard → gặp lỗi 403 Forbidden khi load dashboard data.
+
+**Root Cause**: 
+- Route `/api/dashboard/employee` chỉ có `authorize('employee')`, không cho phép admin
+- Tất cả routes `/api/my-tasks/*` cũng chỉ có `authorize('employee')`
+
+**Fix**: Thêm `'admin'` vào authorize middleware (commit e2a74e4):
+- `src/routes/dashboardRoutes.js`: `authorize('employee', 'admin')` cho `/employee` endpoint
+- `src/routes/userTaskRoutes.js`: Thêm `'admin'` vào tất cả 8 employee task endpoints
+
+**Files Modified**:
+1. `src/routes/dashboardRoutes.js` - Line 57: `authorize('employee', 'admin')`
+2. `src/routes/userTaskRoutes.js` - 8 routes: GET my-tasks, GET task/:id, PUT checklist, POST evidence, POST submit, POST confirm, PUT assign-item, PUT review-item, POST submit-item
+
+**Verification**:
+- ✅ Admin login → employee dashboard load thành công (không còn 403)
+- ✅ Admin có thể xem tasks cá nhân
+- ✅ Admin có thể thực hiện actions như employee (submit, review, assign)
+- ✅ Manager/employee không bị ảnh hưởng
+
+---
