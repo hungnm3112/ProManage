@@ -280,9 +280,14 @@ const getTaskMessages = async (req, res) => {
       return sendError(res, 'Không tìm thấy task', 404);
     }
 
+    const hasUserTask = await UserTask.findOne({
+      storeTaskId: storeTask._id,
+      employeeId: currentUser._id
+    }).select('_id').lean();
     const isInTeam =
       storeTask.assignedPersonId?.toString() === currentUser._id.toString() ||
-      storeTask.assignedEmployees.some(empId => empId.toString() === currentUser._id.toString());
+      storeTask.assignedEmployees.some(empId => empId.toString() === currentUser._id.toString()) ||
+      !!hasUserTask;
     if (!isInTeam) {
       return sendError(res, 'Bạn không thuộc nhóm thực hiện task này', 403);
     }
@@ -324,9 +329,14 @@ const addTaskMessage = async (req, res) => {
       return sendError(res, 'Không tìm thấy task', 404);
     }
 
+    const hasUserTaskForMsg = await UserTask.findOne({
+      storeTaskId: storeTask._id,
+      employeeId: currentUser._id
+    }).select('_id').lean();
     const isInTeam =
       storeTask.assignedPersonId?.toString() === currentUser._id.toString() ||
-      storeTask.assignedEmployees.some(empId => empId.toString() === currentUser._id.toString());
+      storeTask.assignedEmployees.some(empId => empId.toString() === currentUser._id.toString()) ||
+      !!hasUserTaskForMsg;
     if (!isInTeam) {
       return sendError(res, 'Bạn không thuộc nhóm thực hiện task này', 403);
     }

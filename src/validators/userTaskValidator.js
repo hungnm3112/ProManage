@@ -86,7 +86,7 @@ const validateUploadEvidence = [
     .withMessage('Evidence type must be: photo, video, document, or file'),
   
   body('evidences.*.url')
-    .isURL()
+    .isURL({ require_tld: false })
     .withMessage('Evidence URL must be a valid URL'),
   
   body('evidences.*.filename')
