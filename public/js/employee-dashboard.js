@@ -287,6 +287,14 @@ async function openTaskDetail(userTaskId, role) {
     currentStoreTaskId = task.storeTaskId?._id || task.storeTaskId;
 
     document.getElementById('detailModalTitle').textContent = task.broadcastId?.title || 'Chi tiết công việc';
+    const badge = document.getElementById('detailRoleBadge');
+    if (badge) {
+      badge.className = isResponsible
+        ? 'flex-shrink-0 text-xs px-2 py-0.5 rounded-full font-medium bg-purple-100 text-purple-700'
+        : 'flex-shrink-0 text-xs px-2 py-0.5 rounded-full font-medium bg-green-100 text-green-700';
+      badge.textContent = isResponsible ? '👑 Phụ trách' : '🔧 Thực hiện';
+      badge.classList.remove('hidden');
+    }
     renderDetailContent(task, isResponsible, assignedItems || []);
     renderDetailFooter(task, isResponsible, userTaskId);
     switchModalTab('detail');
@@ -313,6 +321,8 @@ function closeTaskDetail() {
   currentDetailRole = null;
   currentStoreTaskId = null;
   if (messagePollingInterval) { clearInterval(messagePollingInterval); messagePollingInterval = null; }
+  const badge = document.getElementById('detailRoleBadge');
+  if (badge) badge.classList.add('hidden');
 }
 
 function switchModalTab(tab) {
@@ -344,42 +354,109 @@ function switchModalTab(tab) {
 
 function renderDetailContent(task, isResponsible, assignedItems) {
   const broadcast = task.broadcastId || {};
-  const storeInfo = task.storeTaskId?.storeId || {};
+  const storeTask = task.storeTaskId || {};
+  const storeInfo = storeTask.storeId || {};
   const checklist = task.checklist || [];
   const evidences = task.evidences || [];
   const itemsToRender = isResponsible ? checklist : assignedItems;
 
+  const creatorName        = broadcast.createdBy?.FullName || broadcast.createdBy?.fullName || 'Admin';
+  const storeName          = storeInfo.Name || '';
+  const assignedPersonName = storeTask.assignedPersonId?.FullName || storeTask.assignedPersonId?.fullName || '';
+
+  // ── Info block ──────────────────────────────────────────────────
   const infoHtml = `
-    <div class="bg-gray-50 rounded-lg p-4 space-y-2 mb-4">
-      ${broadcast.description ? `<p class="text-sm text-gray-600">${escapeHtml(broadcast.description)}</p>` : ''}
-      <div class="flex flex-wrap gap-3 text-sm">
+    <div class="bg-gray-50 rounded-xl p-4 space-y-2 mb-4 text-sm">
+      <div class="flex flex-wrap gap-x-6 gap-y-1">
+        <span class="text-gray-500">👤 Người giao:
+          <span class="font-medium text-gray-800">${escapeHtml(creatorName)}</span>
+        </span>
+        ${!isResponsible && assignedPersonName
+          ? `<span class="text-gray-500">👑 Phụ trách:
+               <span class="font-medium text-gray-800">${escapeHtml(assignedPersonName)}</span>
+             </span>`
+          : ''}
+        ${storeName
+          ? `<span class="text-gray-500">🏪 Chi nhánh:
+               <span class="font-medium text-gray-800">${escapeHtml(storeName)}</span>
+             </span>`
+          : ''}
+      </div>
+      <div class="flex flex-wrap items-center gap-3">
         ${broadcast.deadline ? `<span>📅 Hạn: ${formatDeadline(broadcast.deadline)}</span>` : ''}
-        ${storeInfo.Name ? `<span class="text-gray-600">🏪 ${escapeHtml(storeInfo.Name)}</span>` : ''}
         ${broadcast.priority ? priorityBadge(broadcast.priority) : ''}
+        ${statusBadge(task.status)}
       </div>
-      <div>${statusBadge(task.status)}</div>
+      ${isResponsible ? `
+      <div>
+        <div class="flex justify-between text-xs text-gray-500 mb-1">
+          <span>📊 Tiến độ tổng</span>
+          <span class="font-medium">${storeTask.completionRate || 0}%</span>
+        </div>
+        <div class="w-full bg-gray-200 rounded-full h-2">
+          <div class="bg-purple-500 h-2 rounded-full transition-all"
+               style="width: ${storeTask.completionRate || 0}%"></div>
+        </div>
+      </div>` : ''}
+      ${broadcast.description
+        ? `<p class="text-gray-600 text-sm pt-1 border-t border-gray-200">${escapeHtml(broadcast.description)}</p>`
+        : ''}
     </div>`;
 
-  const checklistHtml = itemsToRender.length > 0 ? `
-    <div class="mb-4">
-      <h4 class="font-semibold text-gray-800 mb-3 text-sm">
-        ${isResponsible ? '📋 Checklist' : '📌 Việc được giao cho bạn'}
-      </h4>
-      <div id="modalChecklistItems" class="space-y-2">
-        ${renderModalChecklist(itemsToRender, isResponsible, task._id)}
-      </div>
-    </div>` : '';
+  // ── Checklist ────────────────────────────────────────────────────
+  let checklistHtml = '';
+  if (itemsToRender.length > 0) {
+    const sectionLabel = isResponsible
+      ? `📋 Checklist <span class="text-gray-400 font-normal text-xs">(${checklist.length} mục)</span>`
+      : `📌 Việc được giao <span class="text-gray-400 font-normal text-xs">(${assignedItems.length}/${checklist.length || '?'} mục)</span>`;
+    checklistHtml = `
+      <div class="mb-4">
+        <h4 class="font-semibold text-gray-800 mb-3 text-sm">${sectionLabel}</h4>
+        <div id="modalChecklistItems" class="space-y-2">
+          ${renderModalChecklist(itemsToRender, isResponsible, task._id)}
+        </div>
+      </div>`;
+  }
 
-  const uploadHtml = `
-    <div class="mb-2">
-      <h4 class="font-semibold text-gray-800 mb-2 text-sm">📷 Upload ảnh báo cáo</h4>
-      <input type="file" id="evidenceInput" accept="image/*" multiple class="block text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100">
-      <div id="evidencePreviews" class="flex flex-wrap gap-2 mt-2"></div>
-      ${evidences.length > 0 ? `<p class="text-xs text-gray-500 mt-1">${evidences.length} ảnh đã tải lên trước đó</p>` : ''}
-    </div>`;
+  // ── Upload / Evidence ────────────────────────────────────────────
+  const canUpload        = ['in_progress', 'rejected'].includes(task.status);
+  const showReadOnlyEvid = ['submitted', 'approved'].includes(task.status) && evidences.length > 0;
+
+  let uploadHtml = '';
+  if (canUpload) {
+    const thumbs = evidences.length > 0
+      ? `<div class="flex flex-wrap gap-2 mt-2">
+           ${evidences.map(e => `<img src="${e.url}" alt="evidence"
+             class="w-16 h-16 object-cover rounded-lg border border-gray-200 cursor-pointer"
+             onclick="window.open('${e.url}','_blank')">`).join('')}
+         </div>
+         <p class="text-xs text-gray-400 mt-1">${evidences.length} ảnh đã tải — thêm ảnh mới bên dưới</p>`
+      : '';
+    uploadHtml = `
+      <div class="mb-2">
+        <h4 class="font-semibold text-gray-800 mb-2 text-sm">📷 Ảnh báo cáo</h4>
+        ${thumbs}
+        <input type="file" id="evidenceInput" accept="image/*" multiple
+          class="block mt-2 text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded
+                 file:border-0 file:text-sm file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100">
+        <div id="evidencePreviews" class="flex flex-wrap gap-2 mt-2"></div>
+      </div>`;
+  } else if (showReadOnlyEvid) {
+    uploadHtml = `
+      <div class="mb-2">
+        <h4 class="font-semibold text-gray-800 mb-2 text-sm">📷 Ảnh báo cáo đã nộp</h4>
+        <div class="flex flex-wrap gap-2">
+          ${evidences.map(e => `<img src="${e.url}" alt="evidence"
+            class="w-16 h-16 object-cover rounded-lg border border-gray-200 cursor-pointer"
+            onclick="window.open('${e.url}','_blank')">`).join('')}
+        </div>
+      </div>`;
+  }
 
   document.getElementById('taskDetailContent').innerHTML = infoHtml + checklistHtml + uploadHtml;
-  document.getElementById('evidenceInput')?.addEventListener('change', handleEvidencePreview);
+  if (canUpload) {
+    document.getElementById('evidenceInput')?.addEventListener('change', handleEvidencePreview);
+  }
 }
 
 function renderModalChecklist(items, isResponsible, userTaskId) {
@@ -405,7 +482,10 @@ function renderModalChecklist(items, isResponsible, userTaskId) {
           ${item.isCompleted ? '✅' : '⬜'}
         </span>
         <div class="flex-1 min-w-0">
-          <span class="${item.isCompleted ? 'line-through text-gray-400' : 'text-gray-800'} text-sm">${escapeHtml(item.task)}</span>
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <span class="${item.isCompleted ? 'line-through text-gray-400' : 'text-gray-800'} text-sm">${escapeHtml(item.task)}</span>
+            ${item.required ? `<span class="text-xs px-1.5 py-0.5 bg-red-50 text-red-600 rounded font-medium border border-red-100">BẮT BUỘC</span>` : ''}
+          </div>
           ${item.note ? `<p class="text-xs text-gray-400 mt-0.5">${escapeHtml(item.note)}</p>` : ''}
           <div class="flex items-center gap-2 mt-1.5 flex-wrap review-btn-area">
             ${assignHtml}

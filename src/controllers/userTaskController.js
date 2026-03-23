@@ -97,14 +97,16 @@ const getTaskById = async (req, res) => {
     const userTask = await UserTask.findById(id)
       .populate({
         path: 'broadcastId',
-        select: 'title description priority deadline createdBy attachments'
+        select: 'title description priority deadline createdBy attachments',
+        populate: { path: 'createdBy', select: 'FullName' }
       })
       .populate({
         path: 'storeTaskId',
-        select: 'status acceptedAt startedAt assignedPersonId assignedEmployees storeId',
+        select: 'status acceptedAt startedAt assignedPersonId assignedEmployees storeId completionRate',
         populate: [
           { path: 'storeId', select: 'Name Map_Address Phone' },
-          { path: 'assignedEmployees', select: 'FullName Phone' }
+          { path: 'assignedEmployees', select: 'FullName Phone' },
+          { path: 'assignedPersonId', select: 'FullName Phone' }
         ]
       })
       .populate({
