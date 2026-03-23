@@ -183,8 +183,8 @@ userTaskSchema.virtual('requiredItemsCompleted').get(function() {
  * Check if task can be submitted
  */
 userTaskSchema.methods.canSubmit = function() {
-  // Must be in assigned or in_progress status
-  if (!['assigned', 'in_progress'].includes(this.status)) {
+  // Must be in assigned, in_progress, or in_progress (after reject) status
+  if (!['assigned', 'in_progress', 'rejected'].includes(this.status)) {
     return { canSubmit: false, reason: 'Task has already been submitted' };
   }
 

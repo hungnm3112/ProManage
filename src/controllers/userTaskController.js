@@ -383,6 +383,11 @@ const submitTask = async (req, res) => {
           if (item.assignedTo?.toString() === currentUser._id.toString() && !item.isCompleted) {
             item.isCompleted = true;
             item.completedAt = new Date();
+            // N-2c: reset reviewStatus so responsible can review again after resubmit
+            item.reviewStatus = null;
+            item.reviewNote = '';
+            item.reviewedAt = null;
+            item.reviewedBy = null;
             itemsMarked = true;
           }
         });
@@ -554,9 +559,26 @@ const reviewChecklistItem = async (req, res) => {
     if (action === 'approve') {
       checklistItem.isCompleted = true;
       checklistItem.completedAt = new Date();
+    } else {
+      // N-1: reset completion so progress rate decreases correctly
+      checklistItem.isCompleted = false;
+      checklistItem.completedAt = null;
     }
 
     await userTask.save();
+
+    // N-2a: reset worker's task status so they can resubmit
+    if (action === 'reject' && checklistItem.assignedTo) {
+      const storeTaskRef = userTask.storeTaskId._id || userTask.storeTaskId;
+      const workerTask = await UserTask.findOne({
+        storeTaskId: storeTaskRef,
+        employeeId: checklistItem.assignedTo
+      });
+      if (workerTask && workerTask.status === 'submitted') {
+        workerTask.status = 'in_progress';
+        await workerTask.save();
+      }
+    }
 
     // Cập nhật completion rate của StoreTask
     const storeTask = userTask.storeTaskId;
